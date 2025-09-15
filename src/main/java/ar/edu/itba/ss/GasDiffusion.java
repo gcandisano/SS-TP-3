@@ -118,9 +118,6 @@ public class GasDiffusion {
             String timeStr = String.format(Locale.ENGLISH, "t %.6f", currentTime);
             outputData.add(timeStr);
             for (Particle p : particles) {
-                if (p.getId() == nextEvent.particle1 || p.getId() == nextEvent.particle2) {
-                    p.setCollided(1);
-                }
                 outputData.add(p.toString());
                 p.setCollided(0);
             }
@@ -322,10 +319,13 @@ public class GasDiffusion {
             p2.setVx(-J * dx / (2 * radius) + p2.getVx());
             p2.setVy(-J * dy / (2 * radius) + p2.getVy());
         }
+        p1.setCollided(1);
+        p2.setCollided(1);
     }
 
     private void handleWallCollision(Particle particle, EventType wallType) {
         double r = particle.getRadius();
+        particle.setCollided(1);
 
         switch (wallType) {
             case LEFT_WALL:
