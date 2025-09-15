@@ -1,3 +1,5 @@
+package ar.edu.itba.ss;
+
 import lombok.Getter;
 import lombok.Setter;
 
@@ -20,10 +22,6 @@ public class Particle {
         this.vx = vx;
         this.vy = vy;
         this.radius = radius;
-    }
-
-    public Double distanceTo(Particle particle) {
-        return Math.sqrt(Math.pow(this.x - particle.getX(), 2) + Math.pow(this.y - particle.getY(), 2));
     }
 
     public void move(double dt) {

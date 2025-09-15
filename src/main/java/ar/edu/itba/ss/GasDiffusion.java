@@ -1,3 +1,5 @@
+package ar.edu.itba.ss;
+
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.*;
@@ -70,7 +72,6 @@ public class GasDiffusion {
 
         PriorityQueue<Event> eventQueue = new PriorityQueue<>();
 
-        // Initialize event queue with all possible events
         for (int i = 0; i < N; i++) {
             for (int j = i + 1; j < N; j++) {
                 double collisionTime = getParticleCollisionTime(particles[i], particles[j]);
@@ -87,7 +88,7 @@ public class GasDiffusion {
             }
         }
 
-        double nextOutputTime = 0.01; // Output every 0.01 seconds
+        double nextOutputTime = 0.01;
         int outputCount = 1;
 
         while (currentTime < totalTime && !eventQueue.isEmpty()) {
@@ -103,7 +104,6 @@ public class GasDiffusion {
             }
             currentTime = nextEvent.time;
 
-            // Handle the event
             if (nextEvent.type == EventType.PARTICLE_COLLISION) {
                 handleParticleCollision(particles[nextEvent.particle1], particles[nextEvent.particle2]);
             } else {
@@ -201,7 +201,7 @@ public class GasDiffusion {
         } else if (t2 > 0) {
             return t2;
         } else {
-            return -1; // Collision in the past
+            return -1;
         }
     }
 
@@ -365,30 +365,6 @@ public class GasDiffusion {
             }
         } catch (IOException e) {
             System.err.println("Error writing to file: " + e.getMessage());
-        }
-    }
-
-    // Helper classes
-    private enum EventType {
-        PARTICLE_COLLISION, LEFT_WALL, RIGHT_WALL, TOP_WALL, BOTTOM_WALL, MIDDLE_WALL
-    }
-
-    private static class Event implements Comparable<Event> {
-        double time;
-        int particle1;
-        int particle2;
-        EventType type;
-
-        Event(double time, int particle1, int particle2, EventType type) {
-            this.time = time;
-            this.particle1 = particle1;
-            this.particle2 = particle2;
-            this.type = type;
-        }
-
-        @Override
-        public int compareTo(Event other) {
-            return Double.compare(this.time, other.time);
         }
     }
 

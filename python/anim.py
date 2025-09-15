@@ -163,7 +163,7 @@ if __name__ == "__main__":
     # Example usage:
     # Create animation for a specific file
     animator = ParticleAnimation("simulation_L_0.03.txt", right_height=0.03)
-    animator.create_animation("gas_diffusion_L0.03.gif")
+    animator.create_animation("gas_diffusion_L_0.03.gif")
     
     # Or process all simulation files
     # create_animations_for_all_simulations()
