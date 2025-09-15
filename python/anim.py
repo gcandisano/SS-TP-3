@@ -38,8 +38,17 @@ class ParticleAnimation:
             circle = Circle((0, 0), radius=0.0015, color='blue', alpha=0.7)
             self.particles.append(self.ax.add_patch(circle))
         
-        # Add time text
+        # Add time text and event counter
         self.time_text = self.ax.text(0.02, 0.095, '', fontsize=12)
+        self.event_text = self.ax.text(0.02, 0.085, '', fontsize=10, color='red')
+        
+        # Add legend for particle colors
+        from matplotlib.patches import Patch
+        legend_elements = [
+            Patch(facecolor='blue', alpha=0.7, label='Partículas normales'),
+            Patch(facecolor='red', alpha=1.0, label='Partículas colisionadas')
+        ]
+        self.ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
         
     def draw_chamber(self):
         # Left chamber (0.09 x 0.09)
@@ -74,12 +83,13 @@ class ParticleAnimation:
                     current_time = line
                     current_particles = []
                 else:
-                    # Parse particle data: x y vx vy
+                    # Parse particle data: x y vx vy collided
                     parts = line.split()
-                    if len(parts) == 4:
+                    if len(parts) == 5:
                         try:
-                            x, y, vx, vy = map(float, parts)
-                            current_particles.append((x, y, vx, vy))
+                            x, y, vx, vy = map(float, parts[:4])
+                            collided = parts[4].lower() == '1'
+                            current_particles.append((x, y, vx, vy, collided))
                         except ValueError:
                             continue
         
@@ -94,50 +104,84 @@ class ParticleAnimation:
         particles_data = self.data[time_str]
         
         # Update particle positions
-        for i, (x, y, vx, vy) in enumerate(particles_data):
+        for i, particle_data in enumerate(particles_data):
             if i < len(self.particles):
+                x, y, vx, vy, collided = particle_data
                 self.particles[i].center = (x, y)
                 
-                # Optional: color particles based on velocity magnitude
-                speed = np.sqrt(vx**2 + vy**2)
-                norm_speed = min(speed / 0.02, 1.0)  # Normalize to 0-1
-                color = plt.cm.plasma(norm_speed)
-                self.particles[i].set_color(color)
+                # Color particles based on collision status
+                if collided:
+                    # Red color for particles that just collided
+                    self.particles[i].set_color('red')
+                    self.particles[i].set_alpha(1.0)  # Full opacity for collided particles
+                else:
+                    # Blue color for normal particles
+                    self.particles[i].set_color('blue')
+                    self.particles[i].set_alpha(0.7)  # Slightly transparent for normal particles
         
-        # Update time text
-        self.time_text.set_text(f'Time: {time_str}')
+        # Update time text with actual event time
+        if time_str.startswith('t '):
+            # Extract numeric time value for display
+            time_value = time_str.split(' ')[1]
+            self.time_text.set_text(f'Event Time: {time_value}s')
+        else:
+            self.time_text.set_text(f'Time: {time_str}')
         
-        return self.particles + [self.time_text]
+        # Update event counter
+        self.event_text.set_text(f'Event #{time_idx + 1} of {len(self.times)}')
+        
+        return self.particles + [self.time_text, self.event_text]
     
-    def create_animation(self, output_gif='particle_animation.gif', fps=10):
-        print(f"Creating animation with {len(self.times)} frames...")
+    def create_animation(self, output_gif='particle_animation.gif', fps=10, pause_duration=800):
+        print(f"Creating fast event-based animation with {len(self.times)} events...")
         
-        # Create animation
+        # Faster animation with shorter pauses between events
         anim = animation.FuncAnimation(
             self.fig, 
             self.update, 
             frames=len(self.times),
-            interval=1000/fps,  # ms per frame
-            blit=True
+            interval=pause_duration,  # ms per frame - faster transitions
+            blit=True,
+            repeat=True
         )
         
-        # Save as GIF
-        print("Saving animation...")
+        # Save as GIF with higher fps for faster viewing
+        print("Saving fast event-based animation...")
         anim.save(output_gif, writer='pillow', fps=fps, dpi=100)
-        print(f"Animation saved as {output_gif}")
+        print(f"Fast event-based animation saved as {output_gif}")
         
         plt.close()
         
         return anim
 
-def create_animation_from_file(filename, output_gif=None):
+def create_fast_animation(filename, output_gif=None):
+    """Create a very fast animation for quick overview"""
+    return create_animation_from_file(filename, output_gif, fps=20, pause_duration=50)
+
+def create_medium_animation(filename, output_gif=None):
+    """Create a medium speed animation for balanced viewing"""
+    return create_animation_from_file(filename, output_gif, fps=15, pause_duration=100)
+
+def create_slow_animation(filename, output_gif=None):
+    """Create a slow animation for detailed event analysis"""
+    return create_animation_from_file(filename, output_gif, fps=8, pause_duration=300)
+
+def create_animation_from_file(filename, output_gif=None, fps=15, pause_duration=100):
     if output_gif is None:
         output_gif = f"{os.path.splitext(filename)[0]}_animation.gif"
     
     try:
-        animator = ParticleAnimation(filename)
-        animator.create_animation(output_gif)
-        print(f"Successfully created animation: {output_gif}")
+        # Extract L value from filename for right_height parameter
+        import re
+        match = re.search(r'L_(\d+\.\d+)', filename)
+        if match:
+            right_height = float(match.group(1))
+        else:
+            right_height = 0.03  # default
+        
+        animator = ParticleAnimation(filename, right_height=right_height)
+        animator.create_animation(output_gif, fps=fps, pause_duration=pause_duration)
+        print(f"Successfully created event-based animation: {output_gif}")
         return True
     except Exception as e:
         print(f"Error creating animation: {e}")
@@ -161,9 +205,9 @@ def create_animations_for_all_simulations():
 
 if __name__ == "__main__":
     # Example usage:
-    # Create animation for a specific file
+    # Create fast event-based animation for a specific file
     animator = ParticleAnimation("simulation_L_0.03.txt", right_height=0.03)
-    animator.create_animation("gas_diffusion_L_0.03.gif")
+    animator.create_animation("gas_diffusion_L_0.03.gif", fps=10, pause_duration=800)
     
     # Or process all simulation files
     # create_animations_for_all_simulations()

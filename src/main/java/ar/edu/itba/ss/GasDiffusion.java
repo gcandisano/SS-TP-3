@@ -62,8 +62,8 @@ public class GasDiffusion {
 
             particles[i] = new Particle(i, x, y, vx, vy, radius);
         }
-        particles[N-1] = new Particle(N-1, leftWidth, rightBottomY, 0, 0, 0.0001);
-        particles[N-2] = new Particle(N-2, leftWidth, rightTopY, 0, 0, 0.0001);
+        particles[N - 1] = new Particle(N - 1, leftWidth, rightBottomY, 0, 0, 0.0001);
+        particles[N - 2] = new Particle(N - 2, leftWidth, rightTopY, 0, 0, 0.0001);
     }
 
     public void runSimulation(double totalTime) {
@@ -90,10 +90,6 @@ public class GasDiffusion {
             }
         }
 
-        double step = 0.1; // Output every 0.01 seconds
-        double nextOutputTime = step;
-        int outputCount = 1;
-
         while (currentTime < totalTime && !eventQueue.isEmpty()) {
             Event nextEvent = eventQueue.poll();
 
@@ -116,15 +112,19 @@ public class GasDiffusion {
             // Update events for the particles involved
             updateEvents(eventQueue, nextEvent);
 
-            // Output if needed
-            if (currentTime >= nextOutputTime) {
-                outputData.add("t" + outputCount);
-                for (Particle p : particles) {
-                    outputData.add(p.toString());
+            // Validate no overlapping particles (safety check)
+            validateNoOverlaps();
+
+            String timeStr = String.format(Locale.ENGLISH, "t %.6f", currentTime);
+            outputData.add(timeStr);
+            for (Particle p : particles) {
+                if (p.getId() == nextEvent.particle1 || p.getId() == nextEvent.particle2) {
+                    p.setCollided(1);
                 }
-                nextOutputTime += step;
-                outputCount++;
+                outputData.add(p.toString());
+                p.setCollided(0);
             }
+
         }
     }
 
@@ -133,40 +133,22 @@ public class GasDiffusion {
         eventQueue.removeIf(event -> (event.particle1 != -1 && (event.particle1 == handledEvent.particle1 || event.particle1 == handledEvent.particle2)) ||
                 (event.particle2 != -1 && (event.particle2 == handledEvent.particle1 || event.particle2 == handledEvent.particle2)));
 
-        // Add new events for the particles involved
-        int p1 = handledEvent.particle1;
-        int p2 = handledEvent.particle2;
-
-        // For particle-particle events
-        if (p2 != -1) {
-            for (int i = 0; i < N; i++) {
-                if (i != p1 && i != p2) {
-                    double collisionTime = getParticleCollisionTime(particles[p1], particles[i]);
-                    if (collisionTime > 0) {
-                        eventQueue.add(new Event(currentTime + collisionTime, p1, i, EventType.PARTICLE_COLLISION));
-                    }
-
-                    collisionTime = getParticleCollisionTime(particles[p2], particles[i]);
-                    if (collisionTime > 0) {
-                        eventQueue.add(new Event(currentTime + collisionTime, p2, i, EventType.PARTICLE_COLLISION));
-                    }
+        // Add new events for ALL particles (not just the ones involved in the current event)
+        // This ensures no collisions are missed
+        for (int i = 0; i < N - 2; i++) { // Exclude virtual wall particles
+            // Particle-particle collisions
+            for (int j = i + 1; j < N - 2; j++) {
+                double collisionTime = getParticleCollisionTime(particles[i], particles[j]);
+                if (collisionTime > 0) {
+                    eventQueue.add(new Event(currentTime + collisionTime, i, j, EventType.PARTICLE_COLLISION));
                 }
             }
-        }
-
-        // For wall events
-        List<WallCollision> wallCollisions1 = getWallCollisionTimes(particles[p1]);
-        for (WallCollision wc : wallCollisions1) {
-            if (wc.time > 0) {
-                eventQueue.add(new Event(currentTime + wc.time, p1, -1, wc.type));
-            }
-        }
-
-        if (p2 != -1) {
-            List<WallCollision> wallCollisions2 = getWallCollisionTimes(particles[p2]);
-            for (WallCollision wc : wallCollisions2) {
+            
+            // Wall collisions
+            List<WallCollision> wallCollisions = getWallCollisionTimes(particles[i]);
+            for (WallCollision wc : wallCollisions) {
                 if (wc.time > 0) {
-                    eventQueue.add(new Event(currentTime + wc.time, p2, -1, wc.type));
+                    eventQueue.add(new Event(currentTime + wc.time, i, -1, wc.type));
                 }
             }
         }
@@ -196,21 +178,28 @@ public class GasDiffusion {
         double t1 = (-b - Math.sqrt(discriminant)) / (2 * a);
         double t2 = (-b + Math.sqrt(discriminant)) / (2 * a);
 
-        // Return the smallest positive time
-        if (t1 > 0 && t2 > 0) {
-            return Math.min(t1, t2);
-        } else if (t1 > 0) {
-            return t1;
-        } else if (t2 > 0) {
-            return t2;
-        } else {
-            return -1;
+        // Return the smallest positive time with safety margin
+        double collisionTime = -1;
+        if (t1 > 1e-10 && t2 > 1e-10) {
+            collisionTime = Math.min(t1, t2);
+        } else if (t1 > 1e-10) {
+            collisionTime = t1;
+        } else if (t2 > 1e-10) {
+            collisionTime = t2;
         }
+        
+        // Additional safety check: ensure particles are not already overlapping
+        double currentDistance = Math.sqrt(dx * dx + dy * dy);
+        if (currentDistance < 2 * radius - 1e-10) {
+            return 1e-10; // Force immediate collision if already overlapping
+        }
+        
+        return collisionTime;
     }
 
     private List<WallCollision> getWallCollisionTimes(Particle particle) {
         List<WallCollision> collisions = new ArrayList<>();
-        final double EPS = 1e-12;
+        final double EPS = 1e-8;
 
         double x = particle.getX();
         double y = particle.getY();
@@ -298,30 +287,40 @@ public class GasDiffusion {
 
     private void handleParticleCollision(Particle p1, Particle p2) {
         // Normal vector from p1 to p2
-        double nx = p2.getX() - p1.getX();
-        double ny = p2.getY() - p1.getY();
-        double distance = Math.sqrt(nx * nx + ny * ny);
-        nx /= distance;
-        ny /= distance;
+        double dx = p2.getX() - p1.getX();
+        double dy = p2.getY() - p1.getY();
+        double distance = Math.sqrt(dx * dx + dy * dy);
 
-        // Tangent vector
-        double tx = -ny;
-        double ty = nx;
+        // Ensure particles are properly separated after collision
+        if (distance < 2 * radius) {
+            double overlap = 2 * radius - distance;
+            double separationX = (dx / distance) * overlap / 2;
+            double separationY = (dy / distance) * overlap / 2;
+            
+            // Move particles apart
+            p1.setX(p1.getX() - separationX);
+            p1.setY(p1.getY() - separationY);
+            p2.setX(p2.getX() + separationX);
+            p2.setY(p2.getY() + separationY);
+            
+            // Recalculate relative position after separation
+            dx = p2.getX() - p1.getX();
+            dy = p2.getY() - p1.getY();
+        }
 
-        // Dot product of velocity with normal and tangent
-        double v1n = p1.getVx() * nx + p1.getVy() * ny;
-        double v1t = p1.getVx() * tx + p1.getVy() * ty;
-        double v2n = p2.getVx() * nx + p2.getVy() * ny;
-        double v2t = p2.getVx() * tx + p2.getVy() * ty;
+        double dvx = p2.getVx() - p1.getVx();
+        double dvy = p2.getVy() - p1.getVy();
+
+        double J = 2 * (dvx * dx + dvy * dy) / (4 * radius);
 
         // Convert back to x,y coordinates
         if (p1.getId() < N - 2) {
-            p1.setVx(v2n * nx + v1t * tx);
-            p1.setVy(v2n * ny + v1t * ty);
+            p1.setVx(J * dx / (2 * radius) + p1.getVx());
+            p1.setVy(J * dy / (2 * radius) + p1.getVy());
         }
         if (p2.getId() < N - 2) {
-            p2.setVx(v1n * nx + v2t * tx);
-            p2.setVy(v1n * ny + v2t * ty);
+            p2.setVx(-J * dx / (2 * radius) + p2.getVx());
+            p2.setVy(-J * dy / (2 * radius) + p2.getVy());
         }
     }
 
@@ -372,6 +371,29 @@ public class GasDiffusion {
             }
         } catch (IOException e) {
             System.err.println("Error writing to file: " + e.getMessage());
+        }
+    }
+
+    private void validateNoOverlaps() {
+        // Safety check to ensure no particles are overlapping
+        for (int i = 0; i < N - 2; i++) {
+            for (int j = i + 1; j < N - 2; j++) {
+                double dx = particles[j].getX() - particles[i].getX();
+                double dy = particles[j].getY() - particles[i].getY();
+                double distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < 2 * radius - 1e-10) {
+                    // Force separation if particles are overlapping
+                    double overlap = 2 * radius - distance;
+                    double separationX = (dx / distance) * overlap / 2;
+                    double separationY = (dy / distance) * overlap / 2;
+                    
+                    particles[i].setX(particles[i].getX() - separationX);
+                    particles[i].setY(particles[i].getY() - separationY);
+                    particles[j].setX(particles[j].getX() + separationX);
+                    particles[j].setY(particles[j].getY() + separationY);
+                }
+            }
         }
     }
 

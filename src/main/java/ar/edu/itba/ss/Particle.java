@@ -14,6 +14,7 @@ public class Particle {
     private Double vy;
     private Double vx;
     private Double radius;
+    private int collided = 0;
 
     public Particle(int id, double x, double y, double vx, double vy, double radius) {
         this.id = id;
@@ -31,6 +32,6 @@ public class Particle {
 
     @Override
     public String toString() {
-        return String.format(Locale.ENGLISH, "%.6f %.6f %.6f %.6f", x, y, vx, vy);
+        return String.format(Locale.ENGLISH, "%.6f %.6f %.6f %.6f %d", x, y, vx, vy, collided);
     }
 }
