@@ -36,3 +36,10 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Animation files ###
+*.gif
+*.png
+*.jpg
+*.jpeg
+*.txt

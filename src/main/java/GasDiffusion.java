@@ -1,93 +1,206 @@
-public class GasDiffusion {
-    Particle[] particles;
-    private final Double L;
-    private final Double v;
-    private final Double radious;
-    private final int N;
-    private final Double deltaT;
-    private Double fixedLength;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.*;
 
-    public GasDiffusion(Double L, Double v, Double radious, int N, Double deltaT) {
-        this.L = L;
+public class GasDiffusion {
+    private final Particle[] particles;
+    private final Double v;
+    private final Double radius;
+    private final int N;
+    private double currentTime;
+    private final List<String> outputData;
+
+    // Domain dimensions
+    private final double leftWidth = 0.09;
+    private final double leftHeight = 0.09;
+    private final double rightWidth = 0.09;
+    private final double rightTopY;
+    private final double rightBottomY;
+
+    public GasDiffusion(Double L, Double v, Double radius, int N) {
         this.v = v;
-        this.radious = radious;
+        this.radius = radius;
         this.N = N;
-        this.deltaT = deltaT;
         this.particles = new Particle[N];
+        this.outputData = new ArrayList<>();
+        this.currentTime = 0;
+        this.rightTopY = 0.045 + L / 2;
+        this.rightBottomY = 0.045 - L / 2;
         initializeParticles();
     }
 
     private void initializeParticles() {
+        Random random = new Random();
+
         for (int i = 0; i < N; i++) {
-            double x = Math.random() * L;
-            double y = Math.random() * L;
-            for (int j = 0; j < i; j++) {
-                if (particles[j].distanceTo(new Particle(x, y, 0.0, 0.0, radious)) < 2 * radious) {
-                    i--;
-                    break;
+            boolean validPosition = false;
+            double x = 0, y = 0;
+
+            // Place particles only in the left chamber initially
+            while (!validPosition) {
+                x = radius + random.nextDouble() * (leftWidth - 2 * radius);
+                y = radius + random.nextDouble() * (leftHeight - 2 * radius);
+
+                validPosition = true;
+                for (int j = 0; j < i; j++) {
+                    double dx = x - particles[j].getX();
+                    double dy = y - particles[j].getY();
+                    double distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < 2 * radius) {
+                        validPosition = false;
+                        break;
+                    }
                 }
             }
-            Double vx = Math.random() * v;
-            Double vy = Math.sqrt(v * v - vx * vx);
-            particles[i] = new Particle(x, y, vx, vy, radious);
+
+            // Random velocity with fixed magnitude
+            double angle = 2 * Math.PI * random.nextDouble();
+            double vx = v * Math.cos(angle);
+            double vy = v * Math.sin(angle);
+
+            particles[i] = new Particle(i, x, y, vx, vy, radius);
         }
     }
 
-    /**
-     * Calcula el tiempo al próximo evento de colisión para una partícula dada
-     * @param particle La partícula para la cual calcular el próximo evento
-     * @return El tiempo al próximo evento de colisión
-     */
-    public double getNextCollisionTime(Particle particle) {
-        double minTime = Double.MAX_VALUE;
-        
-        // 1. Calcular tiempo de colisión con otras partículas
-        for (Particle other : particles) {
-            if (other != particle) {
-                double collisionTime = getParticleCollisionTime(particle, other);
-                if (collisionTime > 0 && collisionTime < minTime) {
-                    minTime = collisionTime;
+    public void runSimulation(double totalTime) {
+        outputData.add("t0");
+        for (Particle p : particles) {
+            outputData.add(p.toString());
+        }
+
+        PriorityQueue<Event> eventQueue = new PriorityQueue<>();
+
+        // Initialize event queue with all possible events
+        for (int i = 0; i < N; i++) {
+            for (int j = i + 1; j < N; j++) {
+                double collisionTime = getParticleCollisionTime(particles[i], particles[j]);
+                if (collisionTime > 0) {
+                    eventQueue.add(new Event(collisionTime, i, j, EventType.PARTICLE_COLLISION));
+                }
+            }
+
+            List<WallCollision> wallCollisions = getWallCollisionTimes(particles[i]);
+            for (WallCollision wc : wallCollisions) {
+                if (wc.time > 0) {
+                    eventQueue.add(new Event(wc.time, i, -1, wc.type));
                 }
             }
         }
-        
-        // 2. Calcular tiempo de colisión con las paredes
-        double wallCollisionTime = getWallCollisionTime(particle);
-        if (wallCollisionTime > 0 && wallCollisionTime < minTime) {
-            minTime = wallCollisionTime;
+
+        double nextOutputTime = 0.01; // Output every 0.01 seconds
+        int outputCount = 1;
+
+        while (currentTime < totalTime && !eventQueue.isEmpty()) {
+            Event nextEvent = eventQueue.poll();
+
+            // Skip invalid events
+            if (nextEvent.time < currentTime) continue;
+
+            // Move all particles to the event time
+            double dt = nextEvent.time - currentTime;
+            for (Particle p : particles) {
+                p.move(dt);
+            }
+            currentTime = nextEvent.time;
+
+            // Check and clamp all particles after move (robust domain enforcement)
+            for (Particle p : particles) {
+                checkAndClampDomain(p);
+            }
+
+            // Handle the event
+            if (nextEvent.type == EventType.PARTICLE_COLLISION) {
+                handleParticleCollision(particles[nextEvent.particle1], particles[nextEvent.particle2]);
+            } else {
+                handleWallCollision(particles[nextEvent.particle1], nextEvent.type);
+            }
+
+            // Update events for the particles involved
+            updateEvents(eventQueue, nextEvent);
+
+            // Output if needed
+            if (currentTime >= nextOutputTime) {
+                outputData.add("t" + outputCount);
+                for (Particle p : particles) {
+                    outputData.add(p.toString());
+                }
+                nextOutputTime += 0.01;
+                outputCount++;
+            }
         }
-        
-        return minTime == Double.MAX_VALUE ? -1 : minTime;
     }
-    
-    /**
-     * Calcula el tiempo de colisión entre dos partículas
-     */
+
+    private void updateEvents(PriorityQueue<Event> eventQueue, Event handledEvent) {
+        // Remove all events involving the particles from the handled event
+        eventQueue.removeIf(event -> event.particle1 == handledEvent.particle1 ||
+                event.particle1 == handledEvent.particle2 ||
+                event.particle2 == handledEvent.particle1 ||
+                event.particle2 == handledEvent.particle2);
+
+        // Add new events for the particles involved
+        int p1 = handledEvent.particle1;
+        int p2 = handledEvent.particle2;
+
+        // For particle-particle events
+        if (p2 != -1) {
+            for (int i = 0; i < N; i++) {
+                if (i != p1 && i != p2) {
+                    double collisionTime = getParticleCollisionTime(particles[p1], particles[i]);
+                    if (collisionTime > 0) {
+                        eventQueue.add(new Event(currentTime + collisionTime, p1, i, EventType.PARTICLE_COLLISION));
+                    }
+
+                    collisionTime = getParticleCollisionTime(particles[p2], particles[i]);
+                    if (collisionTime > 0) {
+                        eventQueue.add(new Event(currentTime + collisionTime, p2, i, EventType.PARTICLE_COLLISION));
+                    }
+                }
+            }
+        }
+
+        // For wall events
+        List<WallCollision> wallCollisions1 = getWallCollisionTimes(particles[p1]);
+        for (WallCollision wc : wallCollisions1) {
+            if (wc.time > 0) {
+                eventQueue.add(new Event(currentTime + wc.time, p1, -1, wc.type));
+            }
+        }
+
+        if (p2 != -1) {
+            List<WallCollision> wallCollisions2 = getWallCollisionTimes(particles[p2]);
+            for (WallCollision wc : wallCollisions2) {
+                if (wc.time > 0) {
+                    eventQueue.add(new Event(currentTime + wc.time, p2, -1, wc.type));
+                }
+            }
+        }
+    }
+
     private double getParticleCollisionTime(Particle p1, Particle p2) {
-        // Vector de posición relativa
+        // Vector of relative position
         double dx = p2.getX() - p1.getX();
         double dy = p2.getY() - p1.getY();
-        
-        // Vector de velocidad relativa
+
+        // Vector of relative velocity
         double dvx = p2.getVx() - p1.getVx();
         double dvy = p2.getVy() - p1.getVy();
-        
-        // Coeficientes de la ecuación cuadrática: a*t² + b*t + c = 0
+
+        // Quadratic equation coefficients: a*t² + b*t + c = 0
         double a = dvx * dvx + dvy * dvy;
         double b = 2 * (dx * dvx + dy * dvy);
-        double c = dx * dx + dy * dy - 4 * radious * radious;
-        
-        // Discriminante
+        double c = dx * dx + dy * dy - 4 * radius * radius;
+
+        // Discriminant
         double discriminant = b * b - 4 * a * c;
-        
-        if (discriminant < 0) {
-            return -1; // No hay colisión
+
+        if (discriminant < 0 || a == 0) {
+            return -1; // No collision
         }
-        
+
         double t1 = (-b - Math.sqrt(discriminant)) / (2 * a);
         double t2 = (-b + Math.sqrt(discriminant)) / (2 * a);
-        
-        // Retornar el tiempo positivo más pequeño
+
+        // Return the smallest positive time
         if (t1 > 0 && t2 > 0) {
             return Math.min(t1, t2);
         } else if (t1 > 0) {
@@ -95,48 +208,247 @@ public class GasDiffusion {
         } else if (t2 > 0) {
             return t2;
         } else {
-            return -1; // Colisión en el pasado
+            return -1; // Collision in the past
         }
     }
-    
-    /**
-     * Calcula el tiempo de colisión con las paredes
-     */
-    private double getWallCollisionTime(Particle particle) {
-        double minTime = Double.MAX_VALUE;
-        
-        // Colisión con pared izquierda (x = 0)
-        if (particle.getVx() < 0) {
-            double t = -particle.getX() / particle.getVx();
-            if (t > 0 && t < minTime) {
-                minTime = t;
+
+    private List<WallCollision> getWallCollisionTimes(Particle particle) {
+        List<WallCollision> collisions = new ArrayList<>();
+        final double EPS = 1e-12;
+
+        double x = particle.getX();
+        double y = particle.getY();
+        double vx = particle.getVx();
+        double vy = particle.getVy();
+        double r = particle.getRadius();
+
+        // 1) Leftmost wall (x = 0) - always solid
+        if (vx < -EPS) {
+            double t = (r - x) / vx; // vx < 0 -> t positive if heading left
+            if (t > EPS) collisions.add(new WallCollision(t, EventType.LEFT_WALL));
+        }
+
+        // 2) Rightmost wall (x = leftWidth + rightWidth) - always solid
+        double rightmostX = leftWidth + rightWidth;
+        if (vx > EPS) {
+            double t = (rightmostX - r - x) / vx;
+            if (t > EPS) collisions.add(new WallCollision(t, EventType.RIGHT_WALL));
+        }
+
+        // 3) Middle vertical wall at x = leftWidth (the separating wall with an opening)
+        //    Opening vertical interval is [rightBottomY, rightTopY].
+        //    If the particle would intersect the solid part of the middle wall, we produce a middle-wall event.
+        double middleX = leftWidth;
+        // From LEFT -> test crossing middle from left side
+        if (vx > EPS && x < middleX - r) {
+            double t = (middleX - r - x) / vx;
+            if (t > EPS) {
+                double yAt = y + vy * t;
+                // if yAt lies outside opening (consider particle radius), it's a collision
+                if (yAt < rightBottomY + r || yAt > rightTopY - r) {
+                    collisions.add(new WallCollision(t, EventType.MIDDLE_WALL));
+                }
             }
         }
-        
-        // Colisión con pared derecha (x = L)
-        if (particle.getVx() > 0) {
-            double t = (L - particle.getX()) / particle.getVx();
-            if (t > 0 && t < minTime) {
-                minTime = t;
+        // From RIGHT -> test crossing middle from right side
+        if (vx < -EPS && x > middleX + r) {
+            double t = (middleX + r - x) / vx; // vx negative -> t positive if heading left
+            if (t > EPS) {
+                double yAt = y + vy * t;
+                if (yAt < rightBottomY + r || yAt > rightTopY - r) {
+                    collisions.add(new WallCollision(t, EventType.MIDDLE_WALL));
+                }
             }
         }
-        
-        // Colisión con pared inferior (y = 0)
-        if (particle.getVy() < 0) {
-            double t = -particle.getY() / particle.getVy();
-            if (t > 0 && t < minTime) {
-                minTime = t;
+
+        // 4) Top/bottom walls are always solid
+        // For left chamber
+        if (x < leftWidth - r + EPS) {
+            if (vy < -EPS) {
+                double t = (r - y) / vy;
+                if (t > EPS) collisions.add(new WallCollision(t, EventType.BOTTOM_WALL));
+            } else if (vy > EPS) {
+                double t = (leftHeight - r - y) / vy;
+                if (t > EPS) collisions.add(new WallCollision(t, EventType.TOP_WALL));
             }
         }
-        
-        // Colisión con pared superior (y = L)
-        if (particle.getVy() > 0) {
-            double t = (L - particle.getY()) / particle.getVy();
-            if (t > 0 && t < minTime) {
-                minTime = t;
+        // For right chamber
+        else if (x > leftWidth + r - EPS) {
+            if (vy < -EPS) {
+                double t = (rightBottomY + r - y) / vy;
+                if (t > EPS) collisions.add(new WallCollision(t, EventType.BOTTOM_WALL));
+            } else if (vy > EPS) {
+                double t = (rightTopY - r - y) / vy;
+                if (t > EPS) collisions.add(new WallCollision(t, EventType.TOP_WALL));
             }
         }
-        
-        return minTime == Double.MAX_VALUE ? -1 : minTime;
+        // For particles near the middle wall, check both sets of top/bottom
+        else {
+            if (vy < -EPS) {
+                double t1 = (r - y) / vy;
+                if (t1 > EPS) collisions.add(new WallCollision(t1, EventType.BOTTOM_WALL));
+                double t2 = (rightBottomY + r - y) / vy;
+                if (t2 > EPS) collisions.add(new WallCollision(t2, EventType.BOTTOM_WALL));
+            } else if (vy > EPS) {
+                double t1 = (leftHeight - r - y) / vy;
+                if (t1 > EPS) collisions.add(new WallCollision(t1, EventType.TOP_WALL));
+                double t2 = (rightTopY - r - y) / vy;
+                if (t2 > EPS) collisions.add(new WallCollision(t2, EventType.TOP_WALL));
+            }
+        }
+
+        return collisions;
+    }
+
+    private void handleParticleCollision(Particle p1, Particle p2) {
+        // Normal vector from p1 to p2
+        double nx = p2.getX() - p1.getX();
+        double ny = p2.getY() - p1.getY();
+        double distance = Math.sqrt(nx * nx + ny * ny);
+        nx /= distance;
+        ny /= distance;
+
+        // Tangent vector
+        double tx = -ny;
+        double ty = nx;
+
+        // Dot product of velocity with normal and tangent
+        double v1n = p1.getVx() * nx + p1.getVy() * ny;
+        double v1t = p1.getVx() * tx + p1.getVy() * ty;
+        double v2n = p2.getVx() * nx + p2.getVy() * ny;
+        double v2t = p2.getVx() * tx + p2.getVy() * ty;
+
+        // Convert back to x,y coordinates
+        p1.setVx(v2n * nx + v1t * tx);
+        p1.setVy(v2n * ny + v1t * ty);
+        p2.setVx(v1n * nx + v2t * tx);
+        p2.setVy(v1n * ny + v2t * ty);
+    }
+
+    private void handleWallCollision(Particle particle, EventType wallType) {
+        double r = particle.getRadius();
+
+        switch (wallType) {
+            case LEFT_WALL:
+                particle.setX(r);
+                particle.setVx(Math.abs(particle.getVx()));
+                break;
+            case RIGHT_WALL:
+                particle.setX(leftWidth + rightWidth - r);
+                particle.setVx(-Math.abs(particle.getVx()));
+                break;
+            case TOP_WALL:
+                // determine which top: if particle.x < leftWidth => left top at leftHeight else right top at rightTopY
+                if (particle.getX() < leftWidth) {
+                    particle.setY(leftHeight - r);
+                } else {
+                    particle.setY(rightTopY - r);
+                }
+                particle.setVy(-Math.abs(particle.getVy()));
+                break;
+            case BOTTOM_WALL:
+                if (particle.getX() < leftWidth) {
+                    particle.setY(r);
+                } else {
+                    particle.setY(rightBottomY + r);
+                }
+                particle.setVy(Math.abs(particle.getVy()));
+                break;
+            case MIDDLE_WALL:
+                // if particle is to the left of middle, push to left side; else to right side
+                if (particle.getX() <= leftWidth) {
+                    particle.setX(leftWidth - r);
+                    particle.setVx(-Math.abs(particle.getVx())); // reflect to left direction
+                } else {
+                    particle.setX(leftWidth + r);
+                    particle.setVx(Math.abs(particle.getVx())); // reflect to right direction
+                }
+                break;
+            default:
+                break;
+        }
+
+        // Robust safety clamp for all walls and chambers
+        // Clamp X
+        if (particle.getX() < r) particle.setX(r);
+        if (particle.getX() > leftWidth + rightWidth - r) particle.setX(leftWidth + rightWidth - r);
+        // Clamp Y for left chamber
+        if (particle.getX() <= leftWidth) {
+            if (particle.getY() < r) particle.setY(r);
+            if (particle.getY() > leftHeight - r) particle.setY(leftHeight - r);
+        } else { // right chamber
+            if (particle.getY() < rightBottomY + r) particle.setY(rightBottomY + r);
+            if (particle.getY() > rightTopY - r) particle.setY(rightTopY - r);
+        }
+
+        // Debug: print warning if particle is outside domain (for development)
+        if (particle.getX() < r - 1e-10 || particle.getX() > leftWidth + rightWidth - r + 1e-10 ||
+            (particle.getX() <= leftWidth && (particle.getY() < r - 1e-10 || particle.getY() > leftHeight - r + 1e-10)) ||
+            (particle.getX() > leftWidth && (particle.getY() < rightBottomY + r - 1e-10 || particle.getY() > rightTopY - r + 1e-10))) {
+            System.err.println("[Warning] Particle escaped domain after wall collision: x=" + particle.getX() + ", y=" + particle.getY());
+        }
+    }
+
+
+    public void outputToFile(String filename) {
+        try (FileWriter writer = new FileWriter(filename)) {
+            for (String line : outputData) {
+                writer.write(line + "\n");
+            }
+        } catch (IOException e) {
+            System.err.println("Error writing to file: " + e.getMessage());
+        }
+    }
+
+    // Helper classes
+    private enum EventType {
+        PARTICLE_COLLISION, LEFT_WALL, RIGHT_WALL, TOP_WALL, BOTTOM_WALL, MIDDLE_WALL
+    }
+
+    private static class Event implements Comparable<Event> {
+        double time;
+        int particle1;
+        int particle2;
+        EventType type;
+
+        Event(double time, int particle1, int particle2, EventType type) {
+            this.time = time;
+            this.particle1 = particle1;
+            this.particle2 = particle2;
+            this.type = type;
+        }
+
+        @Override
+        public int compareTo(Event other) {
+            return Double.compare(this.time, other.time);
+        }
+    }
+
+    private static class WallCollision {
+        double time;
+        EventType type;
+
+        WallCollision(double time, EventType type) {
+            this.time = time;
+            this.type = type;
+        }
+    }
+
+    // Strong domain check and clamp, called after every move
+    private void checkAndClampDomain(Particle particle) {
+        double r = particle.getRadius();
+        boolean out = false;
+        if (particle.getX() < r) { particle.setX(r); particle.setVx(Math.abs(particle.getVx())); out = true; }
+        if (particle.getX() > leftWidth + rightWidth - r) { particle.setX(leftWidth + rightWidth - r); particle.setVx(-Math.abs(particle.getVx())); out = true; }
+        if (particle.getX() <= leftWidth) {
+            if (particle.getY() < r) { particle.setY(r); particle.setVy(Math.abs(particle.getVy())); out = true; }
+            if (particle.getY() > leftHeight - r) { particle.setY(leftHeight - r); particle.setVy(-Math.abs(particle.getVy())); out = true; }
+        } else {
+            if (particle.getY() < rightBottomY + r) { particle.setY(rightBottomY + r); particle.setVy(Math.abs(particle.getVy())); out = true; }
+            if (particle.getY() > rightTopY - r) { particle.setY(rightTopY - r); particle.setVy(-Math.abs(particle.getVy())); out = true; }
+        }
+        if (out) {
+            System.err.println("[DomainClamp] Particle clamped: x=" + particle.getX() + ", y=" + particle.getY());
+        }
     }
 }
