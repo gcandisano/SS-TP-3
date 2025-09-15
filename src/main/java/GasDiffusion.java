@@ -103,11 +103,6 @@ public class GasDiffusion {
             }
             currentTime = nextEvent.time;
 
-            // Check and clamp all particles after move (robust domain enforcement)
-            for (Particle p : particles) {
-                checkAndClampDomain(p);
-            }
-
             // Handle the event
             if (nextEvent.type == EventType.PARTICLE_COLLISION) {
                 handleParticleCollision(particles[nextEvent.particle1], particles[nextEvent.particle2]);
@@ -355,38 +350,13 @@ public class GasDiffusion {
                 particle.setVy(Math.abs(particle.getVy()));
                 break;
             case MIDDLE_WALL:
-                // if particle is to the left of middle, push to left side; else to right side
-                if (particle.getX() <= leftWidth) {
-                    particle.setX(leftWidth - r);
-                    particle.setVx(-Math.abs(particle.getVx())); // reflect to left direction
-                } else {
-                    particle.setX(leftWidth + r);
-                    particle.setVx(Math.abs(particle.getVx())); // reflect to right direction
-                }
+                particle.setX(leftWidth - r);
+                particle.setVx(-Math.abs(particle.getVx()));
                 break;
             default:
                 break;
         }
 
-        // Robust safety clamp for all walls and chambers
-        // Clamp X
-        if (particle.getX() < r) particle.setX(r);
-        if (particle.getX() > leftWidth + rightWidth - r) particle.setX(leftWidth + rightWidth - r);
-        // Clamp Y for left chamber
-        if (particle.getX() <= leftWidth) {
-            if (particle.getY() < r) particle.setY(r);
-            if (particle.getY() > leftHeight - r) particle.setY(leftHeight - r);
-        } else { // right chamber
-            if (particle.getY() < rightBottomY + r) particle.setY(rightBottomY + r);
-            if (particle.getY() > rightTopY - r) particle.setY(rightTopY - r);
-        }
-
-        // Debug: print warning if particle is outside domain (for development)
-        if (particle.getX() < r - 1e-10 || particle.getX() > leftWidth + rightWidth - r + 1e-10 ||
-            (particle.getX() <= leftWidth && (particle.getY() < r - 1e-10 || particle.getY() > leftHeight - r + 1e-10)) ||
-            (particle.getX() > leftWidth && (particle.getY() < rightBottomY + r - 1e-10 || particle.getY() > rightTopY - r + 1e-10))) {
-            System.err.println("[Warning] Particle escaped domain after wall collision: x=" + particle.getX() + ", y=" + particle.getY());
-        }
     }
 
 
@@ -434,21 +404,4 @@ public class GasDiffusion {
         }
     }
 
-    // Strong domain check and clamp, called after every move
-    private void checkAndClampDomain(Particle particle) {
-        double r = particle.getRadius();
-        boolean out = false;
-        if (particle.getX() < r) { particle.setX(r); particle.setVx(Math.abs(particle.getVx())); out = true; }
-        if (particle.getX() > leftWidth + rightWidth - r) { particle.setX(leftWidth + rightWidth - r); particle.setVx(-Math.abs(particle.getVx())); out = true; }
-        if (particle.getX() <= leftWidth) {
-            if (particle.getY() < r) { particle.setY(r); particle.setVy(Math.abs(particle.getVy())); out = true; }
-            if (particle.getY() > leftHeight - r) { particle.setY(leftHeight - r); particle.setVy(-Math.abs(particle.getVy())); out = true; }
-        } else {
-            if (particle.getY() < rightBottomY + r) { particle.setY(rightBottomY + r); particle.setVy(Math.abs(particle.getVy())); out = true; }
-            if (particle.getY() > rightTopY - r) { particle.setY(rightTopY - r); particle.setVy(-Math.abs(particle.getVy())); out = true; }
-        }
-        if (out) {
-            System.err.println("[DomainClamp] Particle clamped: x=" + particle.getX() + ", y=" + particle.getY());
-        }
-    }
 }
