@@ -20,19 +20,19 @@ public class GasDiffusion {
     public GasDiffusion(Double L, Double v, Double radius, int N) {
         this.v = v;
         this.radius = radius;
-        this.N = N;
-        this.particles = new Particle[N];
+        this.N = N + 2;
+        this.particles = new Particle[N + 2];
         this.outputData = new ArrayList<>();
         this.currentTime = 0;
-        this.rightTopY = 0.045 + L / 2;
-        this.rightBottomY = 0.045 - L / 2;
+        this.rightTopY = (leftHeight + L) / 2;
+        this.rightBottomY = (leftHeight - L) / 2;
         initializeParticles();
     }
 
     private void initializeParticles() {
         Random random = new Random();
 
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < N - 2; i++) {
             boolean validPosition = false;
             double x = 0, y = 0;
 
@@ -60,6 +60,8 @@ public class GasDiffusion {
 
             particles[i] = new Particle(i, x, y, vx, vy, radius);
         }
+        particles[N-1] = new Particle(N-1, leftWidth, rightBottomY, 0, 0, 0.0001);
+        particles[N-2] = new Particle(N-2, leftWidth, rightTopY, 0, 0, 0.0001);
     }
 
     public void runSimulation(double totalTime) {
@@ -87,7 +89,8 @@ public class GasDiffusion {
             }
         }
 
-        double nextOutputTime = 0.01; // Output every 0.01 seconds
+        double step = 0.1; // Output every 0.01 seconds
+        double nextOutputTime = step;
         int outputCount = 1;
 
         while (currentTime < totalTime && !eventQueue.isEmpty()) {
@@ -119,7 +122,7 @@ public class GasDiffusion {
                 for (Particle p : particles) {
                     outputData.add(p.toString());
                 }
-                nextOutputTime += 0.01;
+                nextOutputTime += step;
                 outputCount++;
             }
         }
@@ -276,7 +279,7 @@ public class GasDiffusion {
             }
         }
         // For particles near the middle wall, check both sets of top/bottom
-        else {
+        /* else {
             if (vy < -EPS) {
                 double t1 = (r - y) / vy;
                 if (t1 > EPS) collisions.add(new WallCollision(t1, EventType.BOTTOM_WALL));
@@ -288,7 +291,7 @@ public class GasDiffusion {
                 double t2 = (rightTopY - r - y) / vy;
                 if (t2 > EPS) collisions.add(new WallCollision(t2, EventType.TOP_WALL));
             }
-        }
+        } */
 
         return collisions;
     }
@@ -312,10 +315,14 @@ public class GasDiffusion {
         double v2t = p2.getVx() * tx + p2.getVy() * ty;
 
         // Convert back to x,y coordinates
-        p1.setVx(v2n * nx + v1t * tx);
-        p1.setVy(v2n * ny + v1t * ty);
-        p2.setVx(v1n * nx + v2t * tx);
-        p2.setVy(v1n * ny + v2t * ty);
+        if (p1.getId() < N - 2) {
+            p1.setVx(v2n * nx + v1t * tx);
+            p1.setVy(v2n * ny + v1t * ty);
+        }
+        if (p2.getId() < N - 2) {
+            p2.setVx(v1n * nx + v2t * tx);
+            p2.setVy(v1n * ny + v2t * ty);
+        }
     }
 
     private void handleWallCollision(Particle particle, EventType wallType) {
