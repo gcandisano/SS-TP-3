@@ -1,0 +1,5 @@
+package ar.edu.itba.ss;
+
+public enum EventType {
+    PARTICLE_COLLISION, LEFT_WALL, RIGHT_WALL, TOP_WALL, BOTTOM_WALL, MIDDLE_WALL
+}
