@@ -1,6 +1,8 @@
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.Locale;
+
 @Getter
 @Setter
 public class Particle {
@@ -31,6 +33,6 @@ public class Particle {
 
     @Override
     public String toString() {
-        return String.format("%.6f %.6f %.6f %.6f", x, y, vx, vy);
+        return String.format(Locale.ENGLISH, "%.6f %.6f %.6f %.6f", x, y, vx, vy);
     }
 }

@@ -127,10 +127,8 @@ public class GasDiffusion {
 
     private void updateEvents(PriorityQueue<Event> eventQueue, Event handledEvent) {
         // Remove all events involving the particles from the handled event
-        eventQueue.removeIf(event -> event.particle1 == handledEvent.particle1 ||
-                event.particle1 == handledEvent.particle2 ||
-                event.particle2 == handledEvent.particle1 ||
-                event.particle2 == handledEvent.particle2);
+        eventQueue.removeIf(event -> (event.particle1 != -1 && (event.particle1 == handledEvent.particle1 || event.particle1 == handledEvent.particle2)) ||
+                (event.particle2 != -1 && (event.particle2 == handledEvent.particle1 || event.particle2 == handledEvent.particle2)));
 
         // Add new events for the particles involved
         int p1 = handledEvent.particle1;
