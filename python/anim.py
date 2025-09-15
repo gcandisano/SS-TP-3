@@ -103,6 +103,10 @@ class ParticleAnimation:
                 norm_speed = min(speed / 0.02, 1.0)  # Normalize to 0-1
                 color = plt.cm.plasma(norm_speed)
                 self.particles[i].set_color(color)
+
+                # Zero-speed particles become invisible (radius 0)
+                if speed == 0:
+                    self.particles[i].set_radius(0.0)
         
         # Update time text
         self.time_text.set_text(f'Time: {time_str}')

@@ -210,7 +210,7 @@ public class GasDiffusion {
 
     private List<WallCollision> getWallCollisionTimes(Particle particle) {
         List<WallCollision> collisions = new ArrayList<>();
-        final double EPS = 1e-12;
+        final double EPS = 1e-12; // Only for velocity zero checks and positive time filtering
 
         double x = particle.getX();
         double y = particle.getY();
@@ -243,6 +243,9 @@ public class GasDiffusion {
                 // if yAt lies outside opening (consider particle radius), it's a collision
                 if (yAt < rightBottomY + r || yAt > rightTopY - r) {
                     collisions.add(new WallCollision(t, EventType.MIDDLE_WALL));
+                } else {
+                    // Crossing from left to right through the opening: emit special event
+                    collisions.add(new WallCollision(t, EventType.LEFT_TO_RIGHT));
                 }
             }
         }
@@ -251,15 +254,16 @@ public class GasDiffusion {
             double t = (middleX + r - x) / vx; // vx negative -> t positive if heading left
             if (t > EPS) {
                 double yAt = y + vy * t;
-                if (yAt < rightBottomY + r || yAt > rightTopY - r) {
-                    collisions.add(new WallCollision(t, EventType.MIDDLE_WALL));
+                if (yAt >= rightBottomY + r && yAt <= rightTopY - r) {
+                    // Crossing from right to left through the opening: emit special event
+                    collisions.add(new WallCollision(t, EventType.LEFT_TO_RIGHT));
                 }
             }
         }
 
         // 4) Top/bottom walls are always solid
-        // For left chamber
-        if (x < leftWidth - r + EPS) {
+        // For left chamber: x <= leftWidth - r
+        if (x <= leftWidth - r) {
             if (vy < -EPS) {
                 double t = (r - y) / vy;
                 if (t > EPS) collisions.add(new WallCollision(t, EventType.BOTTOM_WALL));
@@ -268,8 +272,8 @@ public class GasDiffusion {
                 if (t > EPS) collisions.add(new WallCollision(t, EventType.TOP_WALL));
             }
         }
-        // For right chamber
-        else if (x > leftWidth + r - EPS) {
+        // For right chamber: x >= leftWidth + r
+        else if (x >= leftWidth + r) {
             if (vy < -EPS) {
                 double t = (rightBottomY + r - y) / vy;
                 if (t > EPS) collisions.add(new WallCollision(t, EventType.BOTTOM_WALL));
@@ -278,20 +282,33 @@ public class GasDiffusion {
                 if (t > EPS) collisions.add(new WallCollision(t, EventType.TOP_WALL));
             }
         }
-        // For particles near the middle wall, check both sets of top/bottom
-        /* else {
-            if (vy < -EPS) {
-                double t1 = (r - y) / vy;
-                if (t1 > EPS) collisions.add(new WallCollision(t1, EventType.BOTTOM_WALL));
-                double t2 = (rightBottomY + r - y) / vy;
-                if (t2 > EPS) collisions.add(new WallCollision(t2, EventType.BOTTOM_WALL));
-            } else if (vy > EPS) {
-                double t1 = (leftHeight - r - y) / vy;
-                if (t1 > EPS) collisions.add(new WallCollision(t1, EventType.TOP_WALL));
-                double t2 = (rightTopY - r - y) / vy;
-                if (t2 > EPS) collisions.add(new WallCollision(t2, EventType.TOP_WALL));
+        // For particles near the middle wall (leftWidth - r < x < leftWidth + r),
+        // check destination chamber top/bottom based on vx (no EPS in position checks)
+        else {
+            if (vy > EPS) {
+                // heading upward
+                if (vx > EPS) {
+                    // close to middle, moving right: check right top
+                    double t = (rightTopY - r - y) / vy;
+                    if (t > EPS) collisions.add(new WallCollision(t, EventType.TOP_WALL));
+                } else if (vx < -EPS) {
+                    // close to middle, moving left: check left top
+                    double t = (leftHeight - r - y) / vy;
+                    if (t > EPS) collisions.add(new WallCollision(t, EventType.TOP_WALL));
+                }
+            } else if (vy < -EPS) {
+                // heading downward
+                if (vx > EPS) {
+                    // close to middle, moving right: check right bottom
+                    double t = (rightBottomY + r - y) / vy;
+                    if (t > EPS) collisions.add(new WallCollision(t, EventType.BOTTOM_WALL));
+                } else if (vx < -EPS) {
+                    // close to middle, moving left: check left bottom
+                    double t = (r - y) / vy;
+                    if (t > EPS) collisions.add(new WallCollision(t, EventType.BOTTOM_WALL));
+                }
             }
-        } */
+        }
 
         return collisions;
     }
@@ -357,6 +374,10 @@ public class GasDiffusion {
             case MIDDLE_WALL:
                 particle.setX(leftWidth - r);
                 particle.setVx(-Math.abs(particle.getVx()));
+                break;
+            case LEFT_TO_RIGHT:
+                // Crossing through the opening: do not change position or velocity.
+                // We rely on updateEvents to recalculate future collision times.
                 break;
             default:
                 break;
