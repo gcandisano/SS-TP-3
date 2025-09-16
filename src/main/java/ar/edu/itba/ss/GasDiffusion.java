@@ -220,7 +220,7 @@ public class GasDiffusion {
 
         // 1) Leftmost wall (x = 0) - always solid
         if (vx < -EPS) {
-            double t = (r - x) / vx; // vx < 0 -> t positive if heading left
+            double t = (r - x) / vx;
             if (t > EPS) collisions.add(new WallCollision(t, EventType.LEFT_WALL));
         }
 
@@ -232,23 +232,18 @@ public class GasDiffusion {
         }
 
         // 3) Middle vertical wall at x = leftWidth (the separating wall with an opening)
-        //    Opening vertical interval is [rightBottomY, rightTopY].
-        //    If the particle would intersect the solid part of the middle wall, we produce a middle-wall event.
         double middleX = leftWidth;
-        // From LEFT -> test crossing middle from left side
         if (vx > EPS && x < middleX - r) {
             double t = (middleX - r - x) / vx;
             if (t > EPS) {
                 double yAt = y + vy * t;
-                // if yAt lies outside opening (consider particle radius), it's a collision
                 if (yAt < rightBottomY + r || yAt > rightTopY - r) {
                     collisions.add(new WallCollision(t, EventType.MIDDLE_WALL));
                 }
             }
         }
-        // From RIGHT -> test crossing middle from right side
         if (vx < -EPS && x > middleX + r) {
-            double t = (middleX + r - x) / vx; // vx negative -> t positive if heading left
+            double t = (middleX + r - x) / vx;
             if (t > EPS) {
                 double yAt = y + vy * t;
                 if (yAt < rightBottomY + r || yAt > rightTopY - r) {
@@ -257,41 +252,50 @@ public class GasDiffusion {
             }
         }
 
-        // 4) Top/bottom walls are always solid
-        // For left chamber
-        if (x < leftWidth - r + EPS) {
-            if (vy < -EPS) {
-                double t = (r - y) / vy;
-                if (t > EPS) collisions.add(new WallCollision(t, EventType.BOTTOM_WALL));
-            } else if (vy > EPS) {
-                double t = (leftHeight - r - y) / vy;
-                if (t > EPS) collisions.add(new WallCollision(t, EventType.TOP_WALL));
+        // 4) Top/bottom wall logic with opening
+        if (vy > EPS) { // Moving up
+            double t_top_opening = (rightTopY - r - y) / vy;
+            if (t_top_opening > EPS) {
+                double x_at_top_opening = x + vx * t_top_opening;
+                if (x_at_top_opening > leftWidth) {
+                    // Will hit right box top wall (bounce)
+                    collisions.add(new WallCollision(t_top_opening, EventType.TOP_WALL));
+                } else {
+                    // Will not reach opening, check left box ceiling
+                    double t_left_ceiling = (leftHeight - r - y) / vy;
+                    if (t_left_ceiling > EPS) {
+                        collisions.add(new WallCollision(t_left_ceiling, EventType.TOP_WALL));
+                    }
+                }
+            } else {
+                // Can't reach opening, check left box ceiling
+                double t_left_ceiling = (leftHeight - r - y) / vy;
+                if (t_left_ceiling > EPS) {
+                    collisions.add(new WallCollision(t_left_ceiling, EventType.TOP_WALL));
+                }
+            }
+        } else if (vy < -EPS) { // Moving down
+            double t_bottom_opening = (rightBottomY + r - y) / vy;
+            if (t_bottom_opening > EPS) {
+                double x_at_bottom_opening = x + vx * t_bottom_opening;
+                if (x_at_bottom_opening > leftWidth) {
+                    // Will hit right box bottom wall (bounce)
+                    collisions.add(new WallCollision(t_bottom_opening, EventType.BOTTOM_WALL));
+                } else {
+                    // Will not reach opening, check left box floor
+                    double t_left_floor = (r - y) / vy;
+                    if (t_left_floor > EPS) {
+                        collisions.add(new WallCollision(t_left_floor, EventType.BOTTOM_WALL));
+                    }
+                }
+            } else {
+                // Can't reach opening, check left box floor
+                double t_left_floor = (r - y) / vy;
+                if (t_left_floor > EPS) {
+                    collisions.add(new WallCollision(t_left_floor, EventType.BOTTOM_WALL));
+                }
             }
         }
-        // For right chamber
-        else if (x > leftWidth + r - EPS) {
-            if (vy < -EPS) {
-                double t = (rightBottomY + r - y) / vy;
-                if (t > EPS) collisions.add(new WallCollision(t, EventType.BOTTOM_WALL));
-            } else if (vy > EPS) {
-                double t = (rightTopY - r - y) / vy;
-                if (t > EPS) collisions.add(new WallCollision(t, EventType.TOP_WALL));
-            }
-        }
-        // For particles near the middle wall, check both sets of top/bottom
-        /* else {
-            if (vy < -EPS) {
-                double t1 = (r - y) / vy;
-                if (t1 > EPS) collisions.add(new WallCollision(t1, EventType.BOTTOM_WALL));
-                double t2 = (rightBottomY + r - y) / vy;
-                if (t2 > EPS) collisions.add(new WallCollision(t2, EventType.BOTTOM_WALL));
-            } else if (vy > EPS) {
-                double t1 = (leftHeight - r - y) / vy;
-                if (t1 > EPS) collisions.add(new WallCollision(t1, EventType.TOP_WALL));
-                double t2 = (rightTopY - r - y) / vy;
-                if (t2 > EPS) collisions.add(new WallCollision(t2, EventType.TOP_WALL));
-            }
-        } */
 
         return collisions;
     }
