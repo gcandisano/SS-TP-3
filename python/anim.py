@@ -104,6 +104,9 @@ class ParticleAnimation:
                 norm_speed = min(speed / 0.02, 1.0)  # Normalize to 0-1
                 color = plt.cm.plasma(norm_speed)
                 self.particles[i].set_color(color)
+
+                if speed == 0:
+                    self.particles[i].set_radius(0.0)
         
         # Update time text
         self.time_text.set_text(f'Time: {time_str}')
@@ -220,7 +223,7 @@ def create_MP4s_for_all_simulations(fps=10):
     """Create MP4 videos for all simulation files"""
     simulation_files = [
         ("simulation_L_0.03.txt", 0.03),
-        ("simulation_L_0.05.txt", 0.05), 
+        ("simulation_L_0.05.txt", 0.05),
         ("simulation_L_0.07.txt", 0.07),
         ("simulation_L_0.09.txt", 0.09)
     ]

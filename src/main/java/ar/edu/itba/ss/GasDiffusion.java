@@ -62,8 +62,8 @@ public class GasDiffusion {
 
             particles[i] = new Particle(i, x, y, vx, vy, radius);
         }
-        particles[N-1] = new Particle(N-1, leftWidth, rightBottomY, 0, 0, 0.0001);
-        particles[N-2] = new Particle(N-2, leftWidth, rightTopY, 0, 0, 0.0001);
+        particles[N-1] = new Particle(N-1, leftWidth, rightBottomY, 0, 0, radius);
+        particles[N-2] = new Particle(N-2, leftWidth, rightTopY, 0, 0, radius);
     }
 
     public void runSimulation(double totalTime) {
