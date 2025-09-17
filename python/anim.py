@@ -4,6 +4,7 @@ import matplotlib.animation as animation
 from matplotlib.patches import Rectangle, Circle
 import re
 import os
+import subprocess
 
 class ParticleAnimation:
     def __init__(self, filename, right_height=0.09):
@@ -109,61 +110,114 @@ class ParticleAnimation:
         
         return self.particles + [self.time_text]
     
-    def create_animation(self, output_gif='particle_animation.gif', output_mp4=None, fps=10):
-        print(f"Creating animation with {len(self.times)} frames...")
+    def makeMP4(self, output_mp4=None, fps=10, sample_interval=5):
+        """Create MP4 video only - much faster and smaller than GIF"""
+        if output_mp4 is None:
+            output_mp4 = f"{os.path.splitext(self.filename)[0]}_animation.mp4"
         
-        # Create animation
+        print(f"Creating MP4 animation with {len(self.times)} frames...")
+        
+        # Sample frames to reduce the total number (much faster)
+        if sample_interval > 1:
+            sampled_frames = list(range(0, len(self.times), sample_interval))
+            total_frames = len(sampled_frames)
+            print(f"Sampling every {sample_interval} frames: {total_frames} total frames")
+        else:
+            sampled_frames = list(range(len(self.times)))
+            total_frames = len(self.times)
+        
+        # Create animation with sampled frames
         anim = animation.FuncAnimation(
             self.fig, 
             self.update, 
-            frames=len(self.times),
-            interval=1000/fps,  # ms per frame
+            frames=total_frames,
+            interval=1000/fps,
             blit=True
         )
         
-        # Save as GIF
-        print("Saving GIF animation...")
-        anim.save(output_gif, writer='pillow', fps=fps, dpi=100)
-        print(f"GIF animation saved as {output_gif}")
-        
-        # Save as MP4 video if requested
-        if output_mp4:
-            try:
-                print("Saving MP4 video...")
-                # Use ffmpeg writer for MP4
-                anim.save(output_mp4, writer='ffmpeg', fps=fps, 
-                         bitrate=1800, dpi=100,
-                         extra_args=['-vcodec', 'libx264', '-pix_fmt', 'yuv420p'])
-                print(f"MP4 video saved as {output_mp4}")
-            except Exception as e:
-                print(f"Error saving MP4: {e}")
-                print("Make sure ffmpeg is installed:")
-                print("Windows: Download from https://ffmpeg.org/")
+        try:
+            print("Saving MP4 video...")
+            anim.save(output_mp4, writer='ffmpeg', fps=fps, 
+                     bitrate=1800, dpi=100,
+                     extra_args=['-vcodec', 'libx264', '-pix_fmt', 'yuv420p'])
+            print(f"✓ MP4 video saved as {output_mp4}")
+            print(f"  Frames: {total_frames}, FPS: {fps}, Estimated size: 1-5MB")
+        except Exception as e:
+            print(f"✗ Error saving MP4: {e}")
+            if "ffmpeg" in str(e).lower():
+                print("Please install ffmpeg:")
+                print("Windows: Download from https://ffmpeg.org/ and add to PATH")
                 print("Mac: brew install ffmpeg")
                 print("Linux: sudo apt-get install ffmpeg")
+            return False
         
         plt.close()
-        
-        return anim
+        return True
 
-def create_animation_from_file(filename, output_gif=None, output_mp4=None, right_height=0.09):
-    if output_gif is None:
-        output_gif = f"{os.path.splitext(filename)[0]}_animation.gif"
-    
-    if output_mp4 is None:
-        output_mp4 = f"{os.path.splitext(filename)[0]}_animation.mp4"
+    # def makeGIF(self, output_gif=None, fps=5):
+    #     """Create GIF animation (commented out - use MP4 instead for better performance)"""
+    #     if output_gif is None:
+    #         output_gif = f"{os.path.splitext(self.filename)[0]}_animation.gif"
+    #     
+    #     print(f"Creating GIF animation with {len(self.times)} frames...")
+    #     print("Warning: GIF creation may be slow for large numbers of frames")
+    #     print("Recommend using makeMP4() instead for better performance")
+    #     
+    #     # Reduce frames for GIF to make it manageable
+    #     sample_interval = max(1, len(self.times) // 500)  # Target ~500 frames max
+    #     sampled_frames = list(range(0, len(self.times), sample_interval))
+    #     
+    #     anim = animation.FuncAnimation(
+    #         self.fig, 
+    #         self.update, 
+    #         frames=len(sampled_frames),
+    #         interval=1000/fps,
+    #         blit=True
+    #     )
+    #     
+    #     try:
+    #         print("Saving GIF animation...")
+    #         anim.save(output_gif, writer='pillow', fps=fps, dpi=100)
+    #         print(f"✓ GIF animation saved as {output_gif}")
+    #     except Exception as e:
+    #         print(f"✗ Error saving GIF: {e}")
+    #         return False
+    #     
+    #     plt.close()
+    #     return True
+
+def create_MP4_from_file(filename, right_height=0.09, fps=10, sample_interval=1):
+    """Create only MP4 video from simulation file"""
+    if not os.path.exists(filename):
+        print(f"✗ File {filename} not found!")
+        return False
     
     try:
         animator = ParticleAnimation(filename, right_height=right_height)
-        animator.create_animation(output_gif, output_mp4)
-        print(f"Successfully created animations: {output_gif} and {output_mp4}")
-        return True
+        output_mp4 = f"{os.path.splitext(filename)[0]}_animation.mp4"
+        success = animator.makeMP4(output_mp4, fps=fps, sample_interval=sample_interval)
+        return success
     except Exception as e:
-        print(f"Error creating animation: {e}")
+        print(f"✗ Error creating animation: {e}")
         return False
 
-# Batch processing function for multiple files
-def create_animations_for_all_simulations():
+# def create_GIF_from_file(filename, right_height=0.09, fps=5):
+#     """Create GIF animation from simulation file (commented out)"""
+#     if not os.path.exists(filename):
+#         print(f"✗ File {filename} not found!")
+#         return False
+#     
+#     try:
+#         animator = ParticleAnimation(filename, right_height=right_height)
+#         output_gif = f"{os.path.splitext(filename)[0]}_animation.gif"
+#         success = animator.makeGIF(output_gif, fps=fps)
+#         return success
+#     except Exception as e:
+#         print(f"✗ Error creating GIF: {e}")
+#         return False
+
+def create_MP4s_for_all_simulations(fps=10):
+    """Create MP4 videos for all simulation files"""
     simulation_files = [
         ("simulation_L_0.03.txt", 0.03),
         ("simulation_L_0.05.txt", 0.05), 
@@ -173,47 +227,41 @@ def create_animations_for_all_simulations():
     
     for file, height in simulation_files:
         if os.path.exists(file):
-            print(f"Processing {file} with height {height}...")
-            create_animation_from_file(file, right_height=height)
+            print(f"\nProcessing {file} with height {height}...")
+            create_MP4_from_file(file, right_height=height, fps=fps)
         else:
-            print(f"File {file} not found, skipping...")
+            print(f"✗ File {file} not found, skipping...")
 
 # Function to check if ffmpeg is available
 def check_ffmpeg():
     try:
-        import subprocess
         result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
         if result.returncode == 0:
             print("✓ ffmpeg is available for MP4 creation")
             return True
         else:
-            print("✗ ffmpeg not found. MP4 videos will not be created.")
-            print("Install ffmpeg:")
-            print("Windows: Download from https://ffmpeg.org/")
+            print("✗ ffmpeg not found. MP4 videos cannot be created.")
+            print("Please install ffmpeg:")
+            print("Windows: Download from https://ffmpeg.org/ and add to PATH")
             print("Mac: brew install ffmpeg")
             print("Linux: sudo apt-get install ffmpeg")
             return False
     except:
-        print("✗ ffmpeg not found. MP4 videos will not be created.")
+        print("✗ ffmpeg not found. MP4 videos cannot be created.")
         return False
 
 if __name__ == "__main__":
     # Check if ffmpeg is available
-    has_ffmpeg = check_ffmpeg()
+    if not check_ffmpeg():
+        exit(1)
     
     # Example usage for a specific file
-    filename = "simulation_L_0.03.txt"
-    right_height = 0.03
+    # filename = "simulation_L_0.03.txt"
+    # right_height = 0.03
+    # create_MP4_from_file(filename, right_height=right_height, fps=10, sample_interval=5)
     
-    if os.path.exists(filename):
-        print(f"Creating animation for {filename}...")
-        if has_ffmpeg:
-            create_animation_from_file(filename, right_height=right_height)
-        else:
-            # Create only GIF if ffmpeg is not available
-            create_animation_from_file(filename, output_mp4=None, right_height=right_height)
-    else:
-        print(f"File {filename} not found!")
+    # Process all simulation files (recommended)
+    create_MP4s_for_all_simulations(fps=30)
     
-    # Or process all simulation files
-    # create_animations_for_all_simulations()
+    print("\n✓ All MP4 videos created successfully!")
+    print("MP4 files are much faster to create and smaller than GIF files.")
