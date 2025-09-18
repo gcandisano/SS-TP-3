@@ -62,8 +62,8 @@ public class GasDiffusion {
 
             particles[i] = new Particle(i, x, y, vx, vy, radius);
         }
-        particles[N-1] = new Particle(N-1, leftWidth, rightBottomY, 0, 0, 0.0001);
-        particles[N-2] = new Particle(N-2, leftWidth, rightTopY, 0, 0, 0.0001);
+        particles[N-1] = new Particle(N-1, leftWidth, rightBottomY, 0, 0, 0.0000001);
+        particles[N-2] = new Particle(N-2, leftWidth, rightTopY, 0, 0, 0.0000001);
     }
 
     public void runSimulation(double totalTime) {
@@ -139,15 +139,7 @@ public class GasDiffusion {
         // This ensures no collisions are missed
         for (int i = 0; i < N - 2; i++) { // Real particles only
             // Particle-particle collisions with other real particles
-            for (int j = i + 1; j < N - 2; j++) {
-                double collisionTime = getParticleCollisionTime(particles[i], particles[j]);
-                if (collisionTime > 0) {
-                    eventQueue.add(new Event(currentTime + collisionTime, i, j, EventType.PARTICLE_COLLISION));
-                }
-            }
-            
-            // Collisions with virtual corner particles (N-1 and N-2)
-            for (int j = N - 2; j < N; j++) {
+            for (int j = i + 1; j < N; j++) {
                 double collisionTime = getParticleCollisionTime(particles[i], particles[j]);
                 if (collisionTime > 0) {
                     eventQueue.add(new Event(currentTime + collisionTime, i, j, EventType.PARTICLE_COLLISION));
