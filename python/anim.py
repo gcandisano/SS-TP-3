@@ -26,9 +26,9 @@ class ParticleAnimation:
         self.ax.set_xlim(-0.01, 0.19)  # Slightly beyond walls
         self.ax.set_ylim(-0.01, 0.10)  # Slightly beyond walls
         self.ax.set_aspect('equal')
-        self.ax.set_title('Gas Diffusion Simulation')
-        self.ax.set_xlabel('X position (m)')
-        self.ax.set_ylabel('Y position (m)')
+        # Removed the title as requested
+        self.ax.set_xlabel('X position (m)', fontsize=16)  # Increased font size
+        self.ax.set_ylabel('Y position (m)', fontsize=16)  # Increased font size
         
         # Draw the chamber walls
         self.draw_chamber()
@@ -39,8 +39,8 @@ class ParticleAnimation:
             circle = Circle((0, 0), radius=0.0015, color='blue', alpha=0.7)
             self.particles.append(self.ax.add_patch(circle))
         
-        # Add time text
-        self.time_text = self.ax.text(0.02, 0.095, '', fontsize=12)
+        # Add time text with the requested format
+        self.time_text = self.ax.text(0.02, 0.095, '', fontsize=14)
         
     def draw_chamber(self):
         # Draw a single continuous chamber in L-shape (inverted L)
@@ -115,8 +115,9 @@ class ParticleAnimation:
                 if speed == 0:
                     self.particles[i].set_radius(0.0)
         
-        # Update time text
-        self.time_text.set_text(f'Time: {time_str}')
+        # Update time text with the requested format
+        time_seconds = float(time_str[1:]) * 0.1  # Convert from frame number to seconds
+        self.time_text.set_text(f'Time: {time_seconds:.1f} seconds')
         
         return self.particles + [self.time_text]
     
@@ -164,38 +165,6 @@ class ParticleAnimation:
         plt.close()
         return True
 
-    # def makeGIF(self, output_gif=None, fps=5):
-    #     """Create GIF animation (commented out - use MP4 instead for better performance)"""
-    #     if output_gif is None:
-    #         output_gif = f"{os.path.splitext(self.filename)[0]}_animation.gif"
-    #     
-    #     print(f"Creating GIF animation with {len(self.times)} frames...")
-    #     print("Warning: GIF creation may be slow for large numbers of frames")
-    #     print("Recommend using makeMP4() instead for better performance")
-    #     
-    #     # Reduce frames for GIF to make it manageable
-    #     sample_interval = max(1, len(self.times) // 500)  # Target ~500 frames max
-    #     sampled_frames = list(range(0, len(self.times), sample_interval))
-    #     
-    #     anim = animation.FuncAnimation(
-    #         self.fig, 
-    #         self.update, 
-    #         frames=len(sampled_frames),
-    #         interval=1000/fps,
-    #         blit=True
-    #     )
-    #     
-    #     try:
-    #         print("Saving GIF animation...")
-    #         anim.save(output_gif, writer='pillow', fps=fps, dpi=100)
-    #         print(f"✓ GIF animation saved as {output_gif}")
-    #     except Exception as e:
-    #         print(f"✗ Error saving GIF: {e}")
-    #         return False
-    #     
-    #     plt.close()
-    #     return True
-
 def create_MP4_from_file(filename, right_height=0.09, fps=10, sample_interval=1):
     """Create only MP4 video from simulation file"""
     if not os.path.exists(filename):
@@ -210,21 +179,6 @@ def create_MP4_from_file(filename, right_height=0.09, fps=10, sample_interval=1)
     except Exception as e:
         print(f"✗ Error creating animation: {e}")
         return False
-
-# def create_GIF_from_file(filename, right_height=0.09, fps=5):
-#     """Create GIF animation from simulation file (commented out)"""
-#     if not os.path.exists(filename):
-#         print(f"✗ File {filename} not found!")
-#         return False
-#     
-#     try:
-#         animator = ParticleAnimation(filename, right_height=right_height)
-#         output_gif = f"{os.path.splitext(filename)[0]}_animation.gif"
-#         success = animator.makeGIF(output_gif, fps=fps)
-#         return success
-#     except Exception as e:
-#         print(f"✗ Error creating GIF: {e}")
-#         return False
 
 def create_MP4s_for_all_simulations(fps=10):
     """Create MP4 videos for all simulation files"""
@@ -264,11 +218,6 @@ if __name__ == "__main__":
     # Check if ffmpeg is available
     if not check_ffmpeg():
         exit(1)
-    
-    # Example usage for a specific file
-    # filename = "simulation_L_0.03.txt"
-    # right_height = 0.03
-    # create_MP4_from_file(filename, right_height=right_height, fps=10, sample_interval=5)
     
     # Process all simulation files (recommended)
     create_MP4s_for_all_simulations(fps=30)

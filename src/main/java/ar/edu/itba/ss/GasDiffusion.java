@@ -19,6 +19,8 @@ public class GasDiffusion {
     private final double rightTopY;
     private final double rightBottomY;
 
+    private final List<String> wallCollisionLog = new ArrayList<>();
+
     public GasDiffusion(Double L, Double v, Double radius, int N) {
         this.v = v;
         this.radius = radius;
@@ -145,7 +147,7 @@ public class GasDiffusion {
                     eventQueue.add(new Event(currentTime + collisionTime, i, j, EventType.PARTICLE_COLLISION));
                 }
             }
-            
+
             // Wall collisions
             List<WallCollision> wallCollisions = getWallCollisionTimes(particles[i]);
             for (WallCollision wc : wallCollisions) {
@@ -252,7 +254,7 @@ public class GasDiffusion {
                     collisions.add(new WallCollision(t_left_top, EventType.TOP_WALL));
                 }
             }
-            
+
             // Check collision with top wall of right chamber
             double t_right_top = (rightTopY - r - y) / vy;
             if (t_right_top > EPS) {
@@ -270,7 +272,7 @@ public class GasDiffusion {
                     collisions.add(new WallCollision(t_left_bottom, EventType.BOTTOM_WALL));
                 }
             }
-            
+
             // Check collision with bottom wall of right chamber
             double t_right_bottom = (rightBottomY + r - y) / vy;
             if (t_right_bottom > EPS) {
@@ -325,34 +327,47 @@ public class GasDiffusion {
 
     private void handleWallCollision(Particle particle, EventType wallType) {
         double r = particle.getRadius();
+        int compartment = -1; // 0 = left, 1 = right
+        double normalVelocity = 0;
 
         switch (wallType) {
             case LEFT_WALL:
+                compartment = 0;
+                normalVelocity = -particle.getVx();
                 particle.setX(r);
                 particle.setVx(Math.abs(particle.getVx()));
                 break;
             case RIGHT_WALL:
+                compartment = 1;
+                normalVelocity = particle.getVx();
                 particle.setX(leftWidth + rightWidth - r);
                 particle.setVx(-Math.abs(particle.getVx()));
                 break;
             case TOP_WALL:
-                // determine which top: if particle.x < leftWidth => left top at leftHeight else right top at rightTopY
+                normalVelocity = particle.getVy();
                 if (particle.getX() < leftWidth) {
                     particle.setY(leftHeight - r);
+                    compartment = 0;
                 } else {
                     particle.setY(rightTopY - r);
+                    compartment = 1;
                 }
                 particle.setVy(-Math.abs(particle.getVy()));
                 break;
             case BOTTOM_WALL:
+                normalVelocity = -particle.getVy();
                 if (particle.getX() < leftWidth) {
                     particle.setY(r);
+                    compartment = 0;
                 } else {
                     particle.setY(rightBottomY + r);
+                    compartment = 1;
                 }
                 particle.setVy(Math.abs(particle.getVy()));
                 break;
             case MIDDLE_WALL:
+                compartment = 0;
+                normalVelocity = particle.getVx();
                 particle.setX(leftWidth - r);
                 particle.setVx(-Math.abs(particle.getVx()));
                 break;
@@ -360,6 +375,22 @@ public class GasDiffusion {
                 break;
         }
 
+        if (compartment != -1) {
+            wallCollisionLog.add(String.format("%.6f,%d,%.6f,%.6f",
+                    currentTime, compartment, normalVelocity, particle.getRadius()));
+        }
+    }
+
+    public void outputWallCollisions(String filename) {
+        try (FileWriter writer = new FileWriter(filename)) {
+            // Write header
+            writer.write("time,compartment,normal_velocity,radius\n");
+            for (String line : wallCollisionLog) {
+                writer.write(line + "\n");
+            }
+        } catch (IOException e) {
+            System.err.println("Error writing wall collision log: " + e.getMessage());
+        }
     }
 
     private void validateNoOverlaps() {
@@ -369,10 +400,10 @@ public class GasDiffusion {
             double x = p.getX();
             double y = p.getY();
             double r = p.getRadius();
-            
+
             // Check if particle is outside the container and correct it
             boolean corrected = false;
-            
+
             // Check left boundary
             if (x < r) {
                 p.setX(r);
@@ -383,7 +414,7 @@ public class GasDiffusion {
                 p.setX(leftWidth + rightWidth - r);
                 corrected = true;
             }
-            
+
             // Check if particle is in right chamber but outside its vertical bounds
             if (x > leftWidth - r) {
                 // In right chamber area
@@ -404,19 +435,19 @@ public class GasDiffusion {
                     corrected = true;
                 }
             }
-            
+
             // If particle was corrected, reverse its velocity component perpendicular to the wall
             if (corrected) {
                 if (x < r || x > leftWidth + rightWidth - r) {
                     p.setVx(-p.getVx()); // Reverse x velocity
                 }
-                if (y < r || y > leftHeight - r || 
+                if (y < r || y > leftHeight - r ||
                     (x > leftWidth - r && (y < rightBottomY + r || y > rightTopY - r))) {
                     p.setVy(-p.getVy()); // Reverse y velocity
                 }
             }
         }
-        
+
         // Check for particle-particle overlaps
         for (int i = 0; i < N - 2; i++) {
             for (int j = i + 1; j < N - 2; j++) {
