@@ -62,8 +62,8 @@ public class GasDiffusion {
 
             particles[i] = new Particle(i, x, y, vx, vy, radius);
         }
-        particles[N-1] = new Particle(N-1, leftWidth, rightBottomY, 0, 0, radius);
-        particles[N-2] = new Particle(N-2, leftWidth, rightTopY, 0, 0, radius);
+        particles[N-1] = new Particle(N-1, leftWidth, rightBottomY, 0, 0, 0.0001);
+        particles[N-2] = new Particle(N-2, leftWidth, rightTopY, 0, 0, 0.0001);
     }
 
     public void runSimulation(double totalTime) {
@@ -137,15 +137,23 @@ public class GasDiffusion {
 
         // Add new events for ALL particles (not just the ones involved in the current event)
         // This ensures no collisions are missed
-        for (int i = 0; i < N - 2; i++) { // Exclude virtual wall particles
-            // Particle-particle collisions
+        for (int i = 0; i < N - 2; i++) { // Real particles only
+            // Particle-particle collisions with other real particles
             for (int j = i + 1; j < N - 2; j++) {
                 double collisionTime = getParticleCollisionTime(particles[i], particles[j]);
                 if (collisionTime > 0) {
                     eventQueue.add(new Event(currentTime + collisionTime, i, j, EventType.PARTICLE_COLLISION));
                 }
             }
-
+            
+            // Collisions with virtual corner particles (N-1 and N-2)
+            for (int j = N - 2; j < N; j++) {
+                double collisionTime = getParticleCollisionTime(particles[i], particles[j]);
+                if (collisionTime > 0) {
+                    eventQueue.add(new Event(currentTime + collisionTime, i, j, EventType.PARTICLE_COLLISION));
+                }
+            }
+            
             // Wall collisions
             List<WallCollision> wallCollisions = getWallCollisionTimes(particles[i]);
             for (WallCollision wc : wallCollisions) {
@@ -168,7 +176,7 @@ public class GasDiffusion {
         // Quadratic equation coefficients: a*t² + b*t + c = 0
         double a = dvx * dvx + dvy * dvy;
         double b = 2 * (dx * dvx + dy * dvy);
-        double c = dx * dx + dy * dy - 4 * radius * radius;
+        double c = dx * dx + dy * dy - 4 * p1.getRadius() * p2.getRadius();
 
         // Discriminant
         double discriminant = b * b - 4 * a * c;
@@ -191,7 +199,7 @@ public class GasDiffusion {
 
         // Additional safety check: ensure particles are not already overlapping
         double currentDistance = Math.sqrt(dx * dx + dy * dy);
-        if (currentDistance < 2 * radius - 1e-10) {
+        if (currentDistance < p1.getRadius() + p2.getRadius() - 1e-10) {
             return 1e-10; // Force immediate collision if already overlapping
         }
 
@@ -242,47 +250,41 @@ public class GasDiffusion {
             }
         }
 
-        // 4) Top/bottom wall logic with opening
+        // 4) Top/bottom walls - simplified logic
         if (vy > EPS) { // Moving up
-            double t_top_opening = (rightTopY - r - y) / vy;
-            if (t_top_opening > EPS) {
-                double x_at_top_opening = x + vx * t_top_opening;
-                if (x_at_top_opening > leftWidth) {
-                    // Will hit right box top wall (bounce)
-                    collisions.add(new WallCollision(t_top_opening, EventType.TOP_WALL));
-                } else {
-                    // Will not reach opening, check left box ceiling
-                    double t_left_ceiling = (leftHeight - r - y) / vy;
-                    if (t_left_ceiling > EPS) {
-                        collisions.add(new WallCollision(t_left_ceiling, EventType.TOP_WALL));
-                    }
+            // Check collision with top wall of left chamber
+            double t_left_top = (leftHeight - r - y) / vy;
+            if (t_left_top > EPS) {
+                double x_at_left_top = x + vx * t_left_top;
+                if (x_at_left_top < leftWidth) {
+                    collisions.add(new WallCollision(t_left_top, EventType.TOP_WALL));
                 }
-            } else {
-                // Can't reach opening, check left box ceiling
-                double t_left_ceiling = (leftHeight - r - y) / vy;
-                if (t_left_ceiling > EPS) {
-                    collisions.add(new WallCollision(t_left_ceiling, EventType.TOP_WALL));
+            }
+            
+            // Check collision with top wall of right chamber
+            double t_right_top = (rightTopY - r - y) / vy;
+            if (t_right_top > EPS) {
+                double x_at_right_top = x + vx * t_right_top;
+                if (x_at_right_top > leftWidth) {
+                    collisions.add(new WallCollision(t_right_top, EventType.TOP_WALL));
                 }
             }
         } else if (vy < -EPS) { // Moving down
-            double t_bottom_opening = (rightBottomY + r - y) / vy;
-            if (t_bottom_opening > EPS) {
-                double x_at_bottom_opening = x + vx * t_bottom_opening;
-                if (x_at_bottom_opening > leftWidth) {
-                    // Will hit right box bottom wall (bounce)
-                    collisions.add(new WallCollision(t_bottom_opening, EventType.BOTTOM_WALL));
-                } else {
-                    // Will not reach opening, check left box floor
-                    double t_left_floor = (r - y) / vy;
-                    if (t_left_floor > EPS) {
-                        collisions.add(new WallCollision(t_left_floor, EventType.BOTTOM_WALL));
-                    }
+            // Check collision with bottom wall of left chamber
+            double t_left_bottom = (r - y) / vy;
+            if (t_left_bottom > EPS) {
+                double x_at_left_bottom = x + vx * t_left_bottom;
+                if (x_at_left_bottom < leftWidth) {
+                    collisions.add(new WallCollision(t_left_bottom, EventType.BOTTOM_WALL));
                 }
-            } else {
-                // Can't reach opening, check left box floor
-                double t_left_floor = (r - y) / vy;
-                if (t_left_floor > EPS) {
-                    collisions.add(new WallCollision(t_left_floor, EventType.BOTTOM_WALL));
+            }
+            
+            // Check collision with bottom wall of right chamber
+            double t_right_bottom = (rightBottomY + r - y) / vy;
+            if (t_right_bottom > EPS) {
+                double x_at_right_bottom = x + vx * t_right_bottom;
+                if (x_at_right_bottom > leftWidth) {
+                    collisions.add(new WallCollision(t_right_bottom, EventType.BOTTOM_WALL));
                 }
             }
         }
@@ -297,8 +299,8 @@ public class GasDiffusion {
         double distance = Math.sqrt(dx * dx + dy * dy);
 
         // Ensure particles are properly separated after collision
-        if (distance < 2 * radius) {
-            double overlap = 2 * radius - distance;
+        if (distance < 2 * p1.getRadius() + p2.getRadius()) {
+            double overlap = p1.getRadius() + p2.getRadius() - distance;
             double separationX = (dx / distance) * overlap / 2;
             double separationY = (dy / distance) * overlap / 2;
 
@@ -316,16 +318,16 @@ public class GasDiffusion {
         double dvx = p2.getVx() - p1.getVx();
         double dvy = p2.getVy() - p1.getVy();
 
-        double J = 2 * (dvx * dx + dvy * dy) / (4 * radius);
+        double J = 2 * (dvx * dx + dvy * dy) / (2 * (p1.getRadius() + p2.getRadius()));
 
         // Convert back to x,y coordinates
         if (p1.getId() < N - 2) {
-            p1.setVx(J * dx / (2 * radius) + p1.getVx());
-            p1.setVy(J * dy / (2 * radius) + p1.getVy());
+            p1.setVx(J * dx / (p1.getRadius() + p2.getRadius()) + p1.getVx());
+            p1.setVy(J * dy / (p1.getRadius() + p2.getRadius()) + p1.getVy());
         }
         if (p2.getId() < N - 2) {
-            p2.setVx(-J * dx / (2 * radius) + p2.getVx());
-            p2.setVy(-J * dy / (2 * radius) + p2.getVy());
+            p2.setVx(-J * dx / (p1.getRadius() + p2.getRadius()) + p2.getVx());
+            p2.setVy(-J * dy / (p1.getRadius() + p2.getRadius()) + p2.getVy());
         }
     }
 
@@ -369,16 +371,71 @@ public class GasDiffusion {
     }
 
     private void validateNoOverlaps() {
-        // Safety check to ensure no particles are overlapping
+        // Safety check to ensure no particles are overlapping and all are within bounds
+        for (int i = 0; i < N - 2; i++) {
+            Particle p = particles[i];
+            double x = p.getX();
+            double y = p.getY();
+            double r = p.getRadius();
+            
+            // Check if particle is outside the container and correct it
+            boolean corrected = false;
+            
+            // Check left boundary
+            if (x < r) {
+                p.setX(r);
+                corrected = true;
+            }
+            // Check right boundary
+            else if (x > leftWidth + rightWidth - r) {
+                p.setX(leftWidth + rightWidth - r);
+                corrected = true;
+            }
+            
+            // Check if particle is in right chamber but outside its vertical bounds
+            if (x > leftWidth - r) {
+                // In right chamber area
+                if (y < rightBottomY + r) {
+                    p.setY(rightBottomY + r);
+                    corrected = true;
+                } else if (y > rightTopY - r) {
+                    p.setY(rightTopY - r);
+                    corrected = true;
+                }
+            } else {
+                // In left chamber area
+                if (y < r) {
+                    p.setY(r);
+                    corrected = true;
+                } else if (y > leftHeight - r) {
+                    p.setY(leftHeight - r);
+                    corrected = true;
+                }
+            }
+            
+            // If particle was corrected, reverse its velocity component perpendicular to the wall
+            if (corrected) {
+                if (x < r || x > leftWidth + rightWidth - r) {
+                    p.setVx(-p.getVx()); // Reverse x velocity
+                }
+                if (y < r || y > leftHeight - r || 
+                    (x > leftWidth - r && (y < rightBottomY + r || y > rightTopY - r))) {
+                    p.setVy(-p.getVy()); // Reverse y velocity
+                }
+            }
+        }
+        
+        // Check for particle-particle overlaps
         for (int i = 0; i < N - 2; i++) {
             for (int j = i + 1; j < N - 2; j++) {
                 double dx = particles[j].getX() - particles[i].getX();
                 double dy = particles[j].getY() - particles[i].getY();
                 double distance = Math.sqrt(dx * dx + dy * dy);
+                double minDistance = particles[i].getRadius() + particles[j].getRadius();
 
-                if (distance < 2 * radius - 1e-10) {
+                if (distance < minDistance - 1e-10) {
                     // Force separation if particles are overlapping
-                    double overlap = 2 * radius - distance;
+                    double overlap = minDistance - distance;
                     double separationX = (dx / distance) * overlap / 2;
                     double separationY = (dy / distance) * overlap / 2;
 
