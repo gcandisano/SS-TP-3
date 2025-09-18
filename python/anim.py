@@ -43,22 +43,29 @@ class ParticleAnimation:
         self.time_text = self.ax.text(0.02, 0.095, '', fontsize=12)
         
     def draw_chamber(self):
-        # Left chamber (0.09 x 0.09)
-        left_chamber = Rectangle((0, 0), self.left_width, self.left_height,
-                                 fill=False, color='black', linewidth=2)
-        self.ax.add_patch(left_chamber)
+        # Draw a single continuous chamber in L-shape (inverted L)
+        # Left chamber: full height
+        # Right chamber: only at the top, creating an inverted L shape
         
-        # Right chamber, vertically centered
-        right_chamber = Rectangle((self.left_width, self.right_y0),
-                                  self.right_width, self.right_height,
-                                  fill=False, color='black', linewidth=2)
-        self.ax.add_patch(right_chamber)
+        from matplotlib.patches import Polygon
         
-        # Middle opening (the passage) – same height as right chamber
-        middle_opening = Rectangle((self.left_width, self.right_y0),
-                                   0.0001, self.right_height,
-                                   fill=True, color='white', linewidth=0)
-        self.ax.add_patch(middle_opening)
+        # Define the points of the L-shaped chamber
+        # The right chamber is at the TOP, not in the middle
+        points = [
+            (0, 0),  # Bottom left
+            (self.left_width, 0),  # Bottom right of left chamber
+            (self.left_width, self.right_y0),  # Bottom of opening
+            (self.left_width + self.right_width, self.right_y0),  # Bottom right of right chamber
+            (self.left_width + self.right_width, self.right_y1),  # Top right of right chamber
+            (self.left_width, self.right_y1),  # Top of opening
+            (self.left_width, self.left_height),  # Top left of left chamber
+            (0, self.left_height),  # Top left
+            (0, 0)  # Close the polygon
+        ]
+        
+        # Create the L-shaped chamber polygon
+        chamber = Polygon(points, fill=False, color='black', linewidth=2)
+        self.ax.add_patch(chamber)
 
     
     def parse_file(self):
