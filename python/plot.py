@@ -54,7 +54,7 @@ def process_simulation(filename, L):
 def create_plots(presiones, L):
     """Presión vs tiempo por compartimento."""
     plt.figure(figsize=(10,6))
-    for comp, color, label in [(0, "blue", "Cuadrado"), (1, "red", "Rectángulo")]:
+    for comp, color, label in [(0, "blue", "Área Fija"), (1, "red", "Área Variable")]:
         subset = presiones[presiones["compartment"] == comp]
         plt.plot(subset["tiempo"], subset["P"], color=color, label=label)
     plt.xlabel("Tiempo (s)")
