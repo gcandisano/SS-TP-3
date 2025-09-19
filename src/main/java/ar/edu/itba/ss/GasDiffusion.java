@@ -287,41 +287,28 @@ public class GasDiffusion {
     }
 
     private void handleParticleCollision(Particle p1, Particle p2) {
-        // Normal vector from p1 to p2
         double dx = p2.getX() - p1.getX();
         double dy = p2.getY() - p1.getY();
-        double distance = Math.sqrt(dx * dx + dy * dy);
-
-        // Ensure particles are properly separated after collision
-        if (distance < 2 * p1.getRadius() + p2.getRadius()) {
-            double overlap = p1.getRadius() + p2.getRadius() - distance;
-            double separationX = (dx / distance) * overlap / 2;
-            double separationY = (dy / distance) * overlap / 2;
-
-            // Move particles apart
-            p1.setX(p1.getX() - separationX);
-            p1.setY(p1.getY() - separationY);
-            p2.setX(p2.getX() + separationX);
-            p2.setY(p2.getY() + separationY);
-
-            // Recalculate relative position after separation
-            dx = p2.getX() - p1.getX();
-            dy = p2.getY() - p1.getY();
-        }
+        double sigma = Math.sqrt(dx * dx + dy * dy);
 
         double dvx = p2.getVx() - p1.getVx();
         double dvy = p2.getVy() - p1.getVy();
 
-        double J = 2 * (dvx * dx + dvy * dy) / (2 * (p1.getRadius() + p2.getRadius()));
+        double dvdr = dvx * dx + dvy * dy;
 
-        // Convert back to x,y coordinates
+        double J = dvdr / sigma;
+
+        double Jx = (J * dx) / sigma;
+        double Jy = (J * dy) / sigma;
+
         if (p1.getId() < N - 2) {
-            p1.setVx(J * dx / (p1.getRadius() + p2.getRadius()) + p1.getVx());
-            p1.setVy(J * dy / (p1.getRadius() + p2.getRadius()) + p1.getVy());
+            p1.setVx(p1.getVx() + Jx);
+            p1.setVy(p1.getVy() + Jy);
         }
+
         if (p2.getId() < N - 2) {
-            p2.setVx(-J * dx / (p1.getRadius() + p2.getRadius()) + p2.getVx());
-            p2.setVy(-J * dy / (p1.getRadius() + p2.getRadius()) + p2.getVy());
+            p2.setVx(p2.getVx() - Jx);
+            p2.setVy(p2.getVy() - Jy);
         }
     }
 
@@ -376,15 +363,15 @@ public class GasDiffusion {
         }
 
         if (compartment != -1) {
-            wallCollisionLog.add(String.format("%.6f,%d,%.6f,%.6f",
-                    currentTime, compartment, normalVelocity, particle.getRadius()));
+            wallCollisionLog.add(String.format(Locale.ENGLISH, "%.6f,%d,%.6f",
+                    currentTime, compartment, normalVelocity));
         }
     }
 
     public void outputWallCollisions(String filename) {
         try (FileWriter writer = new FileWriter(filename)) {
             // Write header
-            writer.write("time,compartment,normal_velocity,radius\n");
+            writer.write("time,compartment,normal_velocity\n");
             for (String line : wallCollisionLog) {
                 writer.write(line + "\n");
             }
