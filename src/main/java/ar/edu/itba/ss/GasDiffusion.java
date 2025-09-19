@@ -308,11 +308,11 @@ public class GasDiffusion {
             dx = p2.getX() - p1.getX();
             dy = p2.getY() - p1.getY();
         }
-
+        /*
         double dvx = p2.getVx() - p1.getVx();
         double dvy = p2.getVy() - p1.getVy();
 
-        double J = 2 * (dvx * dx + dvy * dy) / (2 * (p1.getRadius() + p2.getRadius()));
+       double J = 2 * (dvx * dx + dvy * dy) / (2 * (p1.getRadius() + p2.getRadius()));
 
         // Convert back to x,y coordinates
         if (p1.getId() < N - 2) {
@@ -322,6 +322,31 @@ public class GasDiffusion {
         if (p2.getId() < N - 2) {
             p2.setVx(-J * dx / (p1.getRadius() + p2.getRadius()) + p2.getVx());
             p2.setVy(-J * dy / (p1.getRadius() + p2.getRadius()) + p2.getVy());
+        }*/
+        double c = dx / (p1.getRadius() + p2.getRadius());
+        double s = dy / (p1.getRadius() + p2.getRadius());
+
+        double s2 = s * s;
+        double c2 = c * c;
+        double sc = s * c;
+
+        double m00 = -1 * c2 + 1 * s2;
+        double m01 = -(1 + 1) * sc;
+        double m10 = m01;
+        double m11 = -1 * s2 + 1 * c2;
+
+        double vx1 = p1.getVx();
+        double vy1 = p1.getVy();
+        double vx2 = p2.getVx();
+        double vy2 = p2.getVy();
+
+        if (p1.getId() < N-2) {
+            p1.setVx(m00 * vx1 + m01 * vy2);
+            p1.setVy(m10 * vx1 + m11 * vy2);
+        }
+        if (p2.getId() < N-2) {
+            p2.setVx(m00 * vx2 + m01 * vy2);
+            p2.setVy(m10 * vx2 + m11 * vy2);
         }
     }
 
