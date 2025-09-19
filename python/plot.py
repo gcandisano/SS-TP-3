@@ -57,9 +57,9 @@ def create_plots(presiones, L):
     for comp, color, label in [(0, "blue", "Área Fija"), (1, "red", "Área Variable")]:
         subset = presiones[presiones["compartment"] == comp]
         plt.plot(subset["tiempo"], subset["P"], color=color, label=label)
-    plt.xlabel("Tiempo (s)")
-    plt.ylabel("Presión (kg/s²)")
-    plt.legend()
+    plt.xlabel("Tiempo (s)", fontsize=16)
+    plt.ylabel("Presión (kg/s²)", fontsize=16)
+    plt.legend(fontsize=16)
     plt.grid(True)
     plt.show()
 
@@ -88,9 +88,9 @@ def plot_pressure_vs_inv_area(resultados):
     x_lin = np.linspace(invA.min()*0.95, invA.max()*1.05, 200)
     plt.plot(x_lin, fit_fn(x_lin), "k--", linewidth=2, label="Ajuste del Modelo Lineal")
 
-    plt.xlabel("1 / Área total (1/m²)")
-    plt.ylabel("Presión promedio (kg/s²)")
-    plt.legend()
+    plt.xlabel("1 / Área total (1/m²)", fontsize=16)
+    plt.ylabel("Presión (kg/s²)", fontsize=16)
+    plt.legend(fontsize=16)
     plt.grid(True)
     plt.show()
 

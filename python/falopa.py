@@ -80,9 +80,9 @@ plt.plot(times_sampled, MSD_sampled, 'b-', linewidth=1)
 plt.plot(times_fit, np.poly1d(coeffs)(times_fit), 'r--', linewidth=2,
          label=f'Ajuste lineal, D={D:.2e} m²/s')
 
-plt.xlabel("Tiempo desde estado estacionario (s)", fontsize=12)
-plt.ylabel("<r²> (m²)", fontsize=12)
-plt.legend(fontsize=11)
+plt.xlabel("Tiempo (s)", fontsize=16)
+plt.ylabel("<z²> (m²)", fontsize=16)
+plt.legend(fontsize=16)
 plt.grid(True, linestyle='--', alpha=0.6)
 plt.tight_layout()
 plt.show()
